@@ -27,6 +27,7 @@ import kotlinx.android.synthetic.main.activity_main.*
 import mozilla.voice.assistant.intents.IntentRunner
 import mozilla.voice.assistant.intents.Metadata
 import mozilla.voice.assistant.intents.alarm.Alarm
+import mozilla.voice.assistant.intents.communication.TextMessage
 import mozilla.voice.assistant.intents.launch.Launch
 import mozilla.voice.assistant.intents.maps.Maps
 import mozilla.voice.assistant.intents.music.Music
@@ -63,7 +64,8 @@ class MainActivity : AppCompatActivity() {
             Alarm.getIntents() +
                     Launch.getIntents() +
                     Maps.getIntents() +
-                    Music.getIntents()
+                    Music.getIntents() +
+                    TextMessage.getIntents()
         )
     }
 
