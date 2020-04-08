@@ -1,12 +1,9 @@
 package mozilla.voice.assistant.intents.communication
 
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.appcompat.app.AppCompatActivity
 import mozilla.voice.assistant.R
 import mozilla.voice.assistant.intents.communication.ui.contact.ContactFragment
-import mozilla.voice.assistant.intents.communication.ui.contact.ContactListAdapter
 
 class ContactActivity : AppCompatActivity() {
 
