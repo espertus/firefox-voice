@@ -19,8 +19,8 @@ import kotlinx.coroutines.launch
 @Entity(tableName = "contact_table")
 class ContactEntity(
     @PrimaryKey @ColumnInfo(name = "nickname") val nickname: String,
+    @ColumnInfo(name = "name") val name: String,
     @ColumnInfo(name = "contactId") val contactId: Long, // foreign key to phone's contact DB
-    @ColumnInfo(name = "email") val email: String,
     @ColumnInfo(name = "phone") val phone: String
 )
 
@@ -39,15 +39,15 @@ interface ContactDao {
     fun insert(contact: ContactEntity)
 }
 
-@Database(entities = arrayOf(ContactEntity::class), version = 1)
+@Database(entities = arrayOf(ContactEntity::class), version = 3)
 abstract class ContactDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
 
     private class ContactDatabaseCallback(
         private val scope: CoroutineScope
     ) : RoomDatabase.Callback() {
-        override fun onOpen(db: SupportSQLiteDatabase) {
-            super.onOpen(db)
+        override fun onCreate(db: SupportSQLiteDatabase) {
+            super.onCreate(db)
             INSTANCE?.let { database ->
                 scope.launch(Dispatchers.IO) {
                     populateDatabase(database.contactDao())
@@ -56,14 +56,12 @@ abstract class ContactDatabase : RoomDatabase() {
         }
 
         suspend fun populateDatabase(contactDao: ContactDao) {
-            contactDao.deleteAll()
-
             // Add sample entries, just while testing.
             contactDao.insert(
                 ContactEntity(
                     "Mom",
+                    "Mother Hubbard",
                     31L,
-                    "mom@gmail.com",
                     "513-555-1212"
                 ))
         }

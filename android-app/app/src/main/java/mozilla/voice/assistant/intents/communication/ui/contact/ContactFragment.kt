@@ -1,9 +1,12 @@
 package mozilla.voice.assistant.intents.communication.ui.contact
 
+import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.ContactsContract
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -22,6 +25,8 @@ import mozilla.voice.assistant.intents.communication.ContactActivity
 class ContactFragment : Fragment() {
     companion object {
         fun newInstance() = ContactFragment()
+        private const val TAG = "ContactFragment"
+        private const val SELECT_CONTACT_FOR_NICKNAME = 1
     }
 
     private lateinit var viewModel: ContactViewModel
@@ -34,26 +39,39 @@ class ContactFragment : Fragment() {
         return inflater.inflate(R.layout.contact_fragment, container, false)
     }
 
-    private fun applyIfPossible(contacts: List<ContactEntity>) {
-        contacts.firstOrNull { it.nickname.toLowerCase() == viewModel.nickname }
-            ?.also { contact ->
-                val intent = when (viewModel.mode) {
-                    ContactActivity.PHONE_MODE -> Intent(Intent.ACTION_DIAL).apply {
-                        data = Uri.parse("tel: ${contact.phone}")
+    private val observer: Observer<List<ContactEntity>> by lazy {
+        Observer<List<ContactEntity>> { contacts ->
+            Log.e(TAG, "observer is running with contacts: ${contacts.map { it.nickname } }")
+            contacts.firstOrNull { it.nickname.toLowerCase() == viewModel.nickname }
+                ?.also { contact ->
+                    val intent = when (viewModel.mode) {
+                        ContactActivity.PHONE_MODE -> Intent(Intent.ACTION_DIAL).apply {
+                            data = Uri.parse("tel: ${contact.phone}")
+                        }
+                        ContactActivity.SMS_MODE -> Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.fromParts("sms", contact.phone, null)
+                        )
+                        else -> throw AssertionError("Illegal mode: ${viewModel.mode}")
                     }
-                    ContactActivity.SMS_MODE -> Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.fromParts("sms", contact.phone, null)
-                    )
-                    else -> throw AssertionError("Illegal mode: ${viewModel.mode}")
+                    viewModel.allUsers.removeObserver(observer)
+                    startActivity(intent)
                 }
-                // TODO: Remove self as observer.
-                startActivity(intent)
-            }
-            ?: throw AssertionError("Could not find contact named ${viewModel.nickname}")
+                ?: run {
+                    // If no contact found, open the contact picker.
+                    viewModel.allUsers.removeObserver(observer)
+                    startActivityForResult(
+                        Intent(Intent.ACTION_PICK).apply {
+                            type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+                        },
+                        SELECT_CONTACT_FOR_NICKNAME
+                    )
+                }
+        }
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        Log.e(TAG, "Entering onActivityCreated()")
         super.onActivityCreated(savedInstanceState)
 
         activity?.let { activity ->
@@ -70,9 +88,7 @@ class ContactFragment : Fragment() {
                 )
             ).get(ContactViewModel::class.java)
 
-            viewModel.allUsers.observe(activity, Observer {
-                applyIfPossible(it)
-            })
+            viewModel.allUsers.observe(activity, observer)
 
             /*
             // Set up RecyclerView.
@@ -88,16 +104,50 @@ class ContactFragment : Fragment() {
              */
         } ?: throw AssertionError("Unable to get parent activity from fragment")
     }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        Log.e(TAG, "In onActivityResult()")
+        // https://stackoverflow.com/a/56574502/631051
+        if (requestCode == SELECT_CONTACT_FOR_NICKNAME) {
+            if (resultCode == Activity.RESULT_OK) {
+                data?.data?.let { contactUri ->
+                    val projection = arrayOf(
+                        android.provider.BaseColumns._ID,
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY,
+                        ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
+                    )
+                    val cursor = requireContext().contentResolver.query(
+                        contactUri, projection, null, null, null
+                    )
+                    if (cursor != null && cursor.moveToFirst()) {
+                        val id = cursor.getLong(0)
+                        val name =
+                            cursor.getString(cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY))
+                        val number =
+                            cursor.getString(cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER))
+                        viewModel.insert(
+                            ContactEntity(viewModel.nickname, name, id, number)
+                        )
+                    }
+                    cursor?.close()
+                }
+            }
+        }
+    }
 }
 
 class ContactViewModelFactory(
-    val application: Application,
-    val mode: String,
-    val nickname: String
+    private val application: Application,
+    private val mode: String,
+    private val nickname: String
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel?> create(modelClass: Class<T>): T =
-        modelClass.getConstructor(Application::class.java, String::class.java, String::class.java)
-            .newInstance(application, mode, nickname)
+        modelClass.getConstructor(
+            Application::class.java,
+            String::class.java,
+            String::class.java
+        ).newInstance(application, mode, nickname)
 }
 
 class ContactViewModel(
@@ -107,18 +157,11 @@ class ContactViewModel(
 ) : AndroidViewModel(application) {
     private val repository: ContactRepository
     val allUsers: LiveData<List<ContactEntity>>
-    var contactMap: Map<String, ContactEntity> = emptyMap()
 
     init {
         val contactsDao = ContactDatabase.getDatabase(application, viewModelScope).contactDao()
         repository = ContactRepository(contactsDao)
         allUsers = repository.allContacts
-        allUsers.value?.map {
-            it.nickname to it
-        }?.let {
-            contactMap = it.toMap()
-        }
-        // TODO: Update contactMap whenever allUsers changes.
     }
 
     fun insert(contact: ContactEntity) = viewModelScope.launch(Dispatchers.IO) {
