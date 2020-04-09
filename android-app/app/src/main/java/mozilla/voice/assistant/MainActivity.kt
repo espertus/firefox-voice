@@ -218,6 +218,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onResults(results: Bundle?) {
+            closeRecognizer()
             showSuccess()
             results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.let {
                 handleResults(it)
