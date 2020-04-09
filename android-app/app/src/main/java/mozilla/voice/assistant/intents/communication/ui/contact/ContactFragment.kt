@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
@@ -21,6 +22,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import mozilla.voice.assistant.R
 import mozilla.voice.assistant.intents.communication.ContactActivity
+
+// https://code.luasoftware.com/tutorials/android/android-livedata-observe-once-only-kotlin/
+fun <T> LiveData<T>.observeOnce(lifecycleOwner: LifecycleOwner, observer: Observer<T>) {
+    observe(lifecycleOwner, object : Observer<T> {
+        override fun onChanged(t: T?) {
+            observer.onChanged(t)
+            removeObserver(this)
+        }
+    })
+}
+
 
 class ContactFragment : Fragment() {
     companion object {
@@ -42,72 +54,59 @@ class ContactFragment : Fragment() {
     private val observer: Observer<List<ContactEntity>> by lazy {
         Observer<List<ContactEntity>> { contacts ->
             Log.e(TAG, "observer is running with contacts: ${contacts.map { it.nickname } }")
-            contacts.firstOrNull { it.nickname.toLowerCase() == viewModel.nickname }
-                ?.also { contact ->
-                    val intent = when (viewModel.mode) {
-                        ContactActivity.PHONE_MODE -> Intent(Intent.ACTION_DIAL).apply {
-                            data = Uri.parse("tel: ${contact.phone}")
+            if (contacts.isNotEmpty()) {
+                contacts.firstOrNull { it.nickname.toLowerCase() == viewModel.nickname }
+                    ?.also { contact ->
+                        val intent = when (viewModel.mode) {
+                            ContactActivity.PHONE_MODE -> Intent(Intent.ACTION_DIAL).apply {
+                                data = Uri.parse("tel: ${contact.phone}")
+                            }
+                            ContactActivity.SMS_MODE -> Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.fromParts("sms", contact.phone, null)
+                            )
+                            else -> throw AssertionError("Illegal mode: ${viewModel.mode}")
                         }
-                        ContactActivity.SMS_MODE -> Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.fromParts("sms", contact.phone, null)
-                        )
-                        else -> throw AssertionError("Illegal mode: ${viewModel.mode}")
+                        viewModel.allUsers.removeObserver(observer)
+                        startActivity(intent)
                     }
-                    viewModel.allUsers.removeObserver(observer)
-                    startActivity(intent)
-                }
-                ?: run {
-                    // If no contact found, open the contact picker.
-                    viewModel.allUsers.removeObserver(observer)
-                    startActivityForResult(
-                        Intent(Intent.ACTION_PICK).apply {
-                            type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
-                        },
-                        SELECT_CONTACT_FOR_NICKNAME
-                    )
-                }
+                    ?: run {
+                        // If no contact found, open the contact picker.
+                        Log.e(TAG, "About to start contact intent")
+                        startActivityForResult(
+                            Intent(Intent.ACTION_PICK).apply {
+                                type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+                            },
+                            SELECT_CONTACT_FOR_NICKNAME
+                        )
+                    }
+            }
         }
     }
 
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        Log.e(TAG, "Entering onActivityCreated()")
-        super.onActivityCreated(savedInstanceState)
-
+    override fun onStart() {
+        Log.e(TAG, "Entering onStart()")
+        super.onStart()
         activity?.let { activity ->
-            val mode = activity.intent.getStringExtra(ContactActivity.MODE_KEY)
-            val nickname =
-                activity.intent.getStringExtra(ContactActivity.NICKNAME_KEY).toLowerCase()
-            // Set up model.
-            viewModel = ViewModelProvider(
-                activity,
-                ContactViewModelFactory(
-                    activity.application,
-                    mode,
-                    nickname
-                )
-            ).get(ContactViewModel::class.java)
-
-            viewModel.allUsers.observe(activity, observer)
-
-            /*
-            // Set up RecyclerView.
-            val recyclerView = activity.findViewById<RecyclerView>(R.id.recyclerview)
-            val adapter = ContactListAdapter(activity)
-            recyclerView.adapter = adapter
-            recyclerView.layoutManager = LinearLayoutManager(activity)
-
-            // Link them together.
-            viewModel.allUsers.observe(activity, Observer { contacts ->
-                contacts?.let { adapter.setContacts(it) }
-            })
-             */
-        } ?: throw AssertionError("Unable to get parent activity from fragment")
+                val mode = activity.intent.getStringExtra(ContactActivity.MODE_KEY)
+                val nickname =
+                    activity.intent.getStringExtra(ContactActivity.NICKNAME_KEY).toLowerCase()
+                // Set up model.
+                viewModel = ViewModelProvider(
+                    activity,
+                    ContactViewModelFactory(
+                        activity.application,
+                        mode,
+                        nickname
+                    )
+                ).get(ContactViewModel::class.java)
+            viewModel.allUsers.observeOnce(activity, observer)
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        Log.e(TAG, "Entering onActivityResult()")
         super.onActivityResult(requestCode, resultCode, data)
-        Log.e(TAG, "In onActivityResult()")
         // https://stackoverflow.com/a/56574502/631051
         if (requestCode == SELECT_CONTACT_FOR_NICKNAME) {
             if (resultCode == Activity.RESULT_OK) {
