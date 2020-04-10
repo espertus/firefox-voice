@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.BaseColumns
 import android.provider.ContactsContract
 import android.util.Log
 import android.view.LayoutInflater
@@ -33,7 +34,6 @@ fun <T> LiveData<T>.observeOnce(lifecycleOwner: LifecycleOwner, observer: Observ
     })
 }
 
-
 class ContactFragment : Fragment() {
     companion object {
         fun newInstance() = ContactFragment()
@@ -42,6 +42,7 @@ class ContactFragment : Fragment() {
     }
 
     private lateinit var viewModel: ContactViewModel
+    private var newContact: ContactEntity? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -51,36 +52,39 @@ class ContactFragment : Fragment() {
         return inflater.inflate(R.layout.contact_fragment, container, false)
     }
 
+    private fun initiateActivity(contact: ContactEntity) {
+        val intent = when (viewModel.mode) {
+            ContactActivity.PHONE_MODE -> Intent(Intent.ACTION_DIAL).apply {
+                data = Uri.parse("tel: ${contact.phone}")
+            }
+            ContactActivity.SMS_MODE -> Intent(
+                Intent.ACTION_VIEW,
+                Uri.fromParts("sms", contact.phone, null)
+            )
+            else -> throw AssertionError("Illegal mode: ${viewModel.mode}")
+        }
+        startActivity(intent)
+    }
+
+    private fun startContactPicker() {
+        Log.e(TAG, "About to start contact intent")
+        startActivityForResult(
+            Intent(Intent.ACTION_PICK).apply {
+                type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+            },
+            SELECT_CONTACT_FOR_NICKNAME
+        )
+    }
+
     private val observer: Observer<List<ContactEntity>> by lazy {
         Observer<List<ContactEntity>> { contacts ->
-            Log.e(TAG, "observer is running with contacts: ${contacts.map { it.nickname } }")
-            if (contacts.isNotEmpty()) {
-                contacts.firstOrNull { it.nickname.toLowerCase() == viewModel.nickname }
-                    ?.also { contact ->
-                        val intent = when (viewModel.mode) {
-                            ContactActivity.PHONE_MODE -> Intent(Intent.ACTION_DIAL).apply {
-                                data = Uri.parse("tel: ${contact.phone}")
-                            }
-                            ContactActivity.SMS_MODE -> Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.fromParts("sms", contact.phone, null)
-                            )
-                            else -> throw AssertionError("Illegal mode: ${viewModel.mode}")
-                        }
-                        viewModel.allUsers.removeObserver(observer)
-                        startActivity(intent)
-                    }
-                    ?: run {
-                        // If no contact found, open the contact picker.
-                        Log.e(TAG, "About to start contact intent")
-                        startActivityForResult(
-                            Intent(Intent.ACTION_PICK).apply {
-                                type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
-                            },
-                            SELECT_CONTACT_FOR_NICKNAME
-                        )
-                    }
-            }
+            Log.e(
+                TAG,
+                "observer is running with contacts: ${contacts.map { it.nickname }}, newContact: $newContact"
+            )
+            (contacts.firstOrNull { it.nickname.toLowerCase() == viewModel.nickname } ?: newContact)
+                ?.also { initiateActivity(it) }
+                ?: startContactPicker()
         }
     }
 
@@ -88,18 +92,18 @@ class ContactFragment : Fragment() {
         Log.e(TAG, "Entering onStart()")
         super.onStart()
         activity?.let { activity ->
-                val mode = activity.intent.getStringExtra(ContactActivity.MODE_KEY)
-                val nickname =
-                    activity.intent.getStringExtra(ContactActivity.NICKNAME_KEY).toLowerCase()
-                // Set up model.
-                viewModel = ViewModelProvider(
-                    activity,
-                    ContactViewModelFactory(
-                        activity.application,
-                        mode,
-                        nickname
-                    )
-                ).get(ContactViewModel::class.java)
+            val mode = activity.intent.getStringExtra(ContactActivity.MODE_KEY)
+            val nickname =
+                activity.intent.getStringExtra(ContactActivity.NICKNAME_KEY).toLowerCase()
+            // Set up model.
+            viewModel = ViewModelProvider(
+                activity,
+                ContactViewModelFactory(
+                    activity.application,
+                    mode,
+                    nickname
+                )
+            ).get(ContactViewModel::class.java)
             viewModel.allUsers.observeOnce(activity, observer)
         }
     }
@@ -107,32 +111,35 @@ class ContactFragment : Fragment() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         Log.e(TAG, "Entering onActivityResult()")
         super.onActivityResult(requestCode, resultCode, data)
-        // https://stackoverflow.com/a/56574502/631051
         if (requestCode == SELECT_CONTACT_FOR_NICKNAME) {
             if (resultCode == Activity.RESULT_OK) {
-                data?.data?.let { contactUri ->
-                    val projection = arrayOf(
-                        android.provider.BaseColumns._ID,
-                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY,
-                        ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
-                    )
-                    val cursor = requireContext().contentResolver.query(
-                        contactUri, projection, null, null, null
-                    )
-                    if (cursor != null && cursor.moveToFirst()) {
-                        val id = cursor.getLong(0)
-                        val name =
-                            cursor.getString(cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY))
-                        val number =
-                            cursor.getString(cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER))
-                        viewModel.insert(
-                            ContactEntity(viewModel.nickname, name, id, number)
-                        )
-                    }
-                    cursor?.close()
-                }
+                data?.data?.let { addContact(it) }
             }
         }
+    }
+
+    private fun addContact(contactUri: Uri) {
+        // https://stackoverflow.com/a/56574502/631051
+        val projection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY,
+            BaseColumns._ID,
+            ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
+        )
+        val cursor = requireContext().contentResolver.query(
+            contactUri, projection, null, null, null
+        )
+        if (cursor != null && cursor.moveToFirst()) {
+            newContact = ContactEntity(
+                viewModel.nickname,
+                cursor.getString(0), // DISPLAY_NAME_PRIMARY
+                cursor.getLong(1), // _ID
+                cursor.getString(2) // NORMALIZED_NUMBER
+            ).apply {
+                Log.e(TAG, "Inserting record for $nickname")
+                viewModel.insert(this)
+            }
+        }
+        cursor?.close()
     }
 }
 

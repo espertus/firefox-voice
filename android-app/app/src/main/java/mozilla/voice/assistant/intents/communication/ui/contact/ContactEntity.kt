@@ -17,7 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Entity(tableName = "contact_table")
-class ContactEntity(
+data class ContactEntity(
     @PrimaryKey @ColumnInfo(name = "nickname") val nickname: String,
     @ColumnInfo(name = "name") val name: String,
     @ColumnInfo(name = "contactId") val contactId: Long, // foreign key to phone's contact DB
