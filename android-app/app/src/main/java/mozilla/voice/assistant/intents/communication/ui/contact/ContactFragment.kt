@@ -19,8 +19,11 @@ import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import java.util.Locale
+import kotlinx.android.synthetic.main.contact_fragment.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import mozilla.voice.assistant.R
 import mozilla.voice.assistant.intents.communication.ContactActivity
 
@@ -42,7 +45,6 @@ class ContactFragment : Fragment() {
     }
 
     private lateinit var viewModel: ContactViewModel
-    private var newContact: ContactEntity? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -52,7 +54,41 @@ class ContactFragment : Fragment() {
         return inflater.inflate(R.layout.contact_fragment, container, false)
     }
 
-    private fun initiateActivity(contact: ContactEntity) {
+    override fun onStart() {
+        Log.e(TAG, "Entering onStart()")
+        super.onStart()
+        contactRequestView.text = activity?.intent?.getStringExtra(ContactActivity.UTTERANCE_KEY)
+        viewModel = buildModel()
+        viewModel.viewModelScope.launch {
+            checkForNickname()
+        }
+    }
+
+    private suspend fun checkForNickname() {
+        val entity = viewModel.getContact()
+        withContext(Dispatchers.Main) {
+            if (entity == null) {
+                startContactPicker()
+            } else {
+                initiateRequestedActivity(entity)
+            }
+        }
+    }
+
+    private fun buildModel() =
+        activity?.run {
+            ViewModelProvider(
+                this,
+                ContactViewModelFactory(
+                    application,
+                    intent.getStringExtra(ContactActivity.MODE_KEY),
+                    intent.getStringExtra(ContactActivity.NICKNAME_KEY)
+                        .toLowerCase(Locale.getDefault())
+                )
+            ).get(ContactViewModel::class.java)
+        } ?: throw AssertionError("Unable to access Activity from ContactFragment")
+
+    private fun initiateRequestedActivity(contact: ContactEntity) {
         val intent = when (viewModel.mode) {
             ContactActivity.PHONE_MODE -> Intent(Intent.ACTION_DIAL).apply {
                 data = Uri.parse("tel: ${contact.phone}")
@@ -64,6 +100,7 @@ class ContactFragment : Fragment() {
             else -> throw AssertionError("Illegal mode: ${viewModel.mode}")
         }
         startActivity(intent)
+        activity?.finish()
     }
 
     private fun startContactPicker() {
@@ -76,50 +113,23 @@ class ContactFragment : Fragment() {
         )
     }
 
-    private val observer: Observer<List<ContactEntity>> by lazy {
-        Observer<List<ContactEntity>> { contacts ->
-            Log.e(
-                TAG,
-                "observer is running with contacts: ${contacts.map { it.nickname }}, newContact: $newContact"
-            )
-            (contacts.firstOrNull { it.nickname.toLowerCase() == viewModel.nickname } ?: newContact)
-                ?.also { initiateActivity(it) }
-                ?: startContactPicker()
-        }
-    }
-
-    override fun onStart() {
-        Log.e(TAG, "Entering onStart()")
-        super.onStart()
-        activity?.let { activity ->
-            val mode = activity.intent.getStringExtra(ContactActivity.MODE_KEY)
-            val nickname =
-                activity.intent.getStringExtra(ContactActivity.NICKNAME_KEY).toLowerCase()
-            // Set up model.
-            viewModel = ViewModelProvider(
-                activity,
-                ContactViewModelFactory(
-                    activity.application,
-                    mode,
-                    nickname
-                )
-            ).get(ContactViewModel::class.java)
-            viewModel.allUsers.observeOnce(activity, observer)
-        }
-    }
-
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         Log.e(TAG, "Entering onActivityResult()")
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == SELECT_CONTACT_FOR_NICKNAME) {
             if (resultCode == Activity.RESULT_OK) {
-                data?.data?.let { addContact(it) }
+                // TODO: Handle other cases
+                data?.data?.let {
+                    val contact = getContact(it)
+                    viewModel.insert(contact)
+                    initiateRequestedActivity(contact)
+                    activity?.finish()
+                }
             }
         }
     }
 
-    private fun addContact(contactUri: Uri) {
-        // https://stackoverflow.com/a/56574502/631051
+    private fun getContact(contactUri: Uri): ContactEntity {
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY,
             BaseColumns._ID,
@@ -129,17 +139,17 @@ class ContactFragment : Fragment() {
             contactUri, projection, null, null, null
         )
         if (cursor != null && cursor.moveToFirst()) {
-            newContact = ContactEntity(
+            val newContact = ContactEntity(
                 viewModel.nickname,
                 cursor.getString(0), // DISPLAY_NAME_PRIMARY
                 cursor.getLong(1), // _ID
                 cursor.getString(2) // NORMALIZED_NUMBER
-            ).apply {
-                Log.e(TAG, "Inserting record for $nickname")
-                viewModel.insert(this)
-            }
+            )
+            cursor.close()
+            return newContact
+        } else {
+            throw java.lang.AssertionError("Unhandled case")
         }
-        cursor?.close()
     }
 }
 
@@ -161,13 +171,19 @@ class ContactViewModel(
     val mode: String,
     val nickname: String
 ) : AndroidViewModel(application) {
-    private val repository: ContactRepository
-    val allUsers: LiveData<List<ContactEntity>>
+    val repository: ContactRepository
 
     init {
         val contactsDao = ContactDatabase.getDatabase(application, viewModelScope).contactDao()
         repository = ContactRepository(contactsDao)
-        allUsers = repository.allContacts
+    }
+
+    suspend fun getContact(contactNickname: String = nickname): ContactEntity? {
+        var contact: ContactEntity? = null
+        withContext(Dispatchers.IO) {
+            contact = repository.get(contactNickname)
+        }
+        return contact
     }
 
     fun insert(contact: ContactEntity) = viewModelScope.launch(Dispatchers.IO) {

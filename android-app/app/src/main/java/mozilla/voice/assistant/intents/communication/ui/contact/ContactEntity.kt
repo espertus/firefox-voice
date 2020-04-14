@@ -1,7 +1,6 @@
 package mozilla.voice.assistant.intents.communication.ui.contact
 
 import android.content.Context
-import androidx.lifecycle.LiveData
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
@@ -27,10 +26,10 @@ data class ContactEntity(
 @Dao
 interface ContactDao {
     @Query("SELECT * FROM contact_table WHERE nickname = :nickname")
-    fun findByNickname(nickname: String): LiveData<ContactEntity>
+    fun findByNickname(nickname: String): ContactEntity?
 
     @Query("SELECT * FROM contact_table ORDER BY nickname")
-    fun findAll(): LiveData<List<ContactEntity>>
+    fun findAll(): List<ContactEntity>
 
     @Query("DELETE FROM contact_table")
     fun deleteAll()
@@ -63,7 +62,8 @@ abstract class ContactDatabase : RoomDatabase() {
                     "Mother Hubbard",
                     31L,
                     "513-555-1212"
-                ))
+                )
+            )
         }
     }
 
@@ -73,21 +73,16 @@ abstract class ContactDatabase : RoomDatabase() {
         private var INSTANCE: ContactDatabase? = null
 
         fun getDatabase(context: Context, scope: CoroutineScope): ContactDatabase {
-            // if the INSTANCE is not null, then return it,
-            // if it is, then create the database
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     ContactDatabase::class.java,
                     "contact_database"
                 )
-                    // Wipes and rebuilds instead of migrating if no Migration object.
-                    // Migration is not part of this codelab.
                     .fallbackToDestructiveMigration()
                     .addCallback(ContactDatabaseCallback(scope))
                     .build()
                 INSTANCE = instance
-                // return instance
                 instance
             }
         }
@@ -95,7 +90,8 @@ abstract class ContactDatabase : RoomDatabase() {
 }
 
 class ContactRepository(private val contactDao: ContactDao) {
-    val allContacts: LiveData<List<ContactEntity>> = contactDao.findAll()
+    suspend fun get(nickname: String) =
+        contactDao.findByNickname(nickname)
 
     suspend fun insert(contactEntity: ContactEntity) {
         contactDao.insert(contactEntity)

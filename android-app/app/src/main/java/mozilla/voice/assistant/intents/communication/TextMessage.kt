@@ -25,6 +25,7 @@ class TextMessage {
         ): android.content.Intent? =
             pr.slots[NAME_KEY]?.let { name ->
                 Intent(context, ContactActivity::class.java).apply {
+                    putExtra(ContactActivity.UTTERANCE_KEY, pr.utterance)
                     putExtra(ContactActivity.MODE_KEY, ContactActivity.SMS_MODE)
                     putExtra(ContactActivity.NICKNAME_KEY, name)
                 }

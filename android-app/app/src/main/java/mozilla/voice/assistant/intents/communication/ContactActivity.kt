@@ -21,6 +21,7 @@ class ContactActivity : AppCompatActivity() {
 
     companion object {
         internal const val TAG = "ContactActivity"
+        internal const val UTTERANCE_KEY = "utterance"
         internal const val MODE_KEY = "mode"
         internal const val SMS_MODE = "sms"
         internal const val PHONE_MODE = "phone"

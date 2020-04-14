@@ -25,6 +25,7 @@ class PhoneCall {
         ): android.content.Intent? =
             pr.slots[NAME_KEY]?.let { name ->
                 Intent(context, ContactActivity::class.java).apply {
+                    putExtra(ContactActivity.UTTERANCE_KEY, pr.utterance)
                     putExtra(ContactActivity.MODE_KEY, ContactActivity.PHONE_MODE)
                     putExtra(ContactActivity.NICKNAME_KEY, name)
                 }
