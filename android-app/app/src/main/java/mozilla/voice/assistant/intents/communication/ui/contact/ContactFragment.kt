@@ -1,50 +1,54 @@
 package mozilla.voice.assistant.intents.communication.ui.contact
 
-import android.app.Activity
-import android.app.Application
-import android.content.Intent
+import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
-import android.provider.BaseColumns
 import android.provider.ContactsContract
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ListView
+import androidx.cursoradapter.widget.CursorAdapter
+import androidx.cursoradapter.widget.SimpleCursorAdapter
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
-import java.util.Locale
-import kotlinx.android.synthetic.main.contact_fragment.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import androidx.loader.app.LoaderManager
+import androidx.loader.content.CursorLoader
+import androidx.loader.content.Loader
 import mozilla.voice.assistant.R
-import mozilla.voice.assistant.intents.communication.ContactActivity
 
-// https://code.luasoftware.com/tutorials/android/android-livedata-observe-once-only-kotlin/
-fun <T> LiveData<T>.observeOnce(lifecycleOwner: LifecycleOwner, observer: Observer<T>) {
-    observe(lifecycleOwner, object : Observer<T> {
-        override fun onChanged(t: T?) {
-            observer.onChanged(t)
-            removeObserver(this)
-        }
-    })
-}
-
-class ContactFragment : Fragment() {
+class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, AdapterView.OnItemClickListener {
     companion object {
         fun newInstance() = ContactFragment()
         private const val TAG = "ContactFragment"
-        private const val SELECT_CONTACT_FOR_NICKNAME = 1
+
+        private val FROM_COLUMNS: Array<String> = arrayOf(
+            ContactsContract.Contacts.DISPLAY_NAME
+        )
+        private val TO_IDS: IntArray = intArrayOf(android.R.id.text1)
+        private val PROJECTION: Array<out String> = arrayOf(
+            ContactsContract.Contacts._ID,
+            ContactsContract.Contacts.LOOKUP_KEY,
+            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
+        )
+
+        // The column index for the _ID column
+        private const val CONTACT_ID_INDEX: Int = 0
+
+        // The column index for the CONTACT_KEY column
+        private const val CONTACT_KEY_INDEX: Int = 1
+        private const val SELECTION: String =
+            "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
     }
 
-    private lateinit var viewModel: ContactViewModel
+    // Support for list of partially matching contacts
+    lateinit var contactsList: ListView
+    var contactId: Long = 0
+    var contactKey: String? = null
+    var contactUri: Uri? = null
+    private var cursorAdapter: SimpleCursorAdapter? = null
+    private var mSearchString: String? = null
+    private val selectionArgs: Array<String> = arrayOf("")
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -54,139 +58,63 @@ class ContactFragment : Fragment() {
         return inflater.inflate(R.layout.contact_fragment, container, false)
     }
 
-    override fun onStart() {
-        Log.e(TAG, "Entering onStart()")
-        super.onStart()
-        contactRequestView.text = activity?.intent?.getStringExtra(ContactActivity.UTTERANCE_KEY)
-        viewModel = buildModel()
-        viewModel.viewModelScope.launch {
-            checkForNickname()
-        }
-    }
-
-    private suspend fun checkForNickname() {
-        val entity = viewModel.getContact()
-        withContext(Dispatchers.Main) {
-            if (entity == null) {
-                startContactPicker()
-            } else {
-                initiateRequestedActivity(entity)
-            }
-        }
-    }
-
-    private fun buildModel() =
-        activity?.run {
-            ViewModelProvider(
-                this,
-                ContactViewModelFactory(
-                    application,
-                    intent.getStringExtra(ContactActivity.MODE_KEY),
-                    intent.getStringExtra(ContactActivity.NICKNAME_KEY)
-                        .toLowerCase(Locale.getDefault())
-                )
-            ).get(ContactViewModel::class.java)
-        } ?: throw AssertionError("Unable to access Activity from ContactFragment")
-
-    private fun initiateRequestedActivity(contact: ContactEntity) {
-        val intent = when (viewModel.mode) {
-            ContactActivity.PHONE_MODE -> Intent(Intent.ACTION_DIAL).apply {
-                data = Uri.parse("tel: ${contact.phone}")
-            }
-            ContactActivity.SMS_MODE -> Intent(
-                Intent.ACTION_VIEW,
-                Uri.fromParts("sms", contact.phone, null)
+    override fun onCreateLoader(loaderId: Int, args: Bundle?): Loader<Cursor> {
+        /*
+         * Makes search string into pattern and
+         * stores it in the selection array
+         */
+        selectionArgs[0] = "%$mSearchString%"
+        // Starts the query
+        return activity?.let {
+            return CursorLoader(
+                it,
+                ContactsContract.Contacts.CONTENT_URI,
+                PROJECTION,
+                SELECTION,
+                selectionArgs,
+                null
             )
-            else -> throw AssertionError("Illegal mode: ${viewModel.mode}")
+        } ?: throw IllegalStateException()
+    }
+
+    override fun onLoadFinished(loader: Loader<Cursor>, cursor: Cursor) {
+        // Put the result Cursor in the adapter for the ListView
+        cursorAdapter?.swapCursor(cursor)
+    }
+
+    override fun onLoaderReset(loader: Loader<Cursor>) {
+        // Delete the reference to the existing Cursor
+        cursorAdapter?.swapCursor(null)
+    }
+
+    override fun onItemClick(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+        // Get the Cursor
+        val cursor: Cursor? = (parent.adapter as? CursorAdapter)?.cursor?.apply {
+            // Move to the selected contact
+            moveToPosition(position)
+            // Get the _ID value
+            contactId = getLong(CONTACT_ID_INDEX)
+            // Get the selected LOOKUP KEY
+            contactKey = getString(CONTACT_KEY_INDEX)
+            // Create the contact's content Uri
+            contactUri = ContactsContract.Contacts.getLookupUri(contactId, contactKey)
+            /*
+             * You can use contactUri as the content URI for retrieving
+             * the details for a contact.
+             */
         }
-        startActivity(intent)
-        activity?.finish()
     }
 
-    private fun startContactPicker() {
-        Log.e(TAG, "About to start contact intent")
-        startActivityForResult(
-            Intent(Intent.ACTION_PICK).apply {
-                type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
-            },
-            SELECT_CONTACT_FOR_NICKNAME
-        )
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        Log.e(TAG, "Entering onActivityResult()")
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == SELECT_CONTACT_FOR_NICKNAME) {
-            if (resultCode == Activity.RESULT_OK) {
-                // TODO: Handle other cases
-                data?.data?.let {
-                    val contact = getContact(it)
-                    viewModel.insert(contact)
-                    initiateRequestedActivity(contact)
-                    activity?.finish()
-                }
-            }
-        }
-    }
-
-    private fun getContact(contactUri: Uri): ContactEntity {
-        val projection = arrayOf(
-            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY,
-            BaseColumns._ID,
-            ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
-        )
-        val cursor = requireContext().contentResolver.query(
-            contactUri, projection, null, null, null
-        )
-        if (cursor != null && cursor.moveToFirst()) {
-            val newContact = ContactEntity(
-                viewModel.nickname,
-                cursor.getString(0), // DISPLAY_NAME_PRIMARY
-                cursor.getLong(1), // _ID
-                cursor.getString(2) // NORMALIZED_NUMBER
+    private fun searchContactsForNickname() {
+        activity?.also {
+            cursorAdapter = SimpleCursorAdapter(
+                it,
+                R.layout.contact_list_item,
+                null,
+                FROM_COLUMNS, TO_IDS,
+                0
             )
-            cursor.close()
-            return newContact
-        } else {
-            throw java.lang.AssertionError("Unhandled case")
+            contactsList.adapter = cursorAdapter
         }
-    }
-}
-
-class ContactViewModelFactory(
-    private val application: Application,
-    private val mode: String,
-    private val nickname: String
-) : ViewModelProvider.Factory {
-    override fun <T : ViewModel?> create(modelClass: Class<T>): T =
-        modelClass.getConstructor(
-            Application::class.java,
-            String::class.java,
-            String::class.java
-        ).newInstance(application, mode, nickname)
-}
-
-class ContactViewModel(
-    application: Application,
-    val mode: String,
-    val nickname: String
-) : AndroidViewModel(application) {
-    val repository: ContactRepository
-
-    init {
-        val contactsDao = ContactDatabase.getDatabase(application, viewModelScope).contactDao()
-        repository = ContactRepository(contactsDao)
-    }
-
-    suspend fun getContact(contactNickname: String = nickname): ContactEntity? {
-        var contact: ContactEntity? = null
-        withContext(Dispatchers.IO) {
-            contact = repository.get(contactNickname)
-        }
-        return contact
-    }
-
-    fun insert(contact: ContactEntity) = viewModelScope.launch(Dispatchers.IO) {
-        repository.insert(contact)
     }
 }

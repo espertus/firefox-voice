@@ -49,4 +49,9 @@
         app:layout_constraintRight_toRightOf="@id/right_guideline"
         app:layout_constraintTop_toTopOf="@id/top_guideline" />
 
+    <ListView xmlns:android="http://schemas.android.com/apk/res/android"
+        android:id="@+id/contactsList"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+
 </androidx.constraintlayout.widget.ConstraintLayout>
