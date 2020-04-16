@@ -1,5 +1,6 @@
 package mozilla.voice.assistant.intents.communication.ui.contact
 
+import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
@@ -8,9 +9,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
+import android.widget.ImageView
 import android.widget.ListView
+import android.widget.TextView
 import androidx.cursoradapter.widget.CursorAdapter
-import androidx.cursoradapter.widget.SimpleCursorAdapter
 import androidx.fragment.app.Fragment
 import androidx.loader.app.LoaderManager
 import androidx.loader.content.CursorLoader
@@ -22,22 +24,15 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
     companion object {
         fun newInstance() = ContactFragment()
         private const val TAG = "ContactFragment"
-
-        private val FROM_COLUMNS: Array<String> = arrayOf(
-            ContactsContract.Contacts.DISPLAY_NAME
-        )
-        private val TO_IDS: IntArray = intArrayOf(android.R.id.text1)
         private val PROJECTION: Array<out String> = arrayOf(
             ContactsContract.Contacts._ID,
-            ContactsContract.Contacts.LOOKUP_KEY,
-            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
+            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
+            ContactsContract.Contacts.PHOTO_THUMBNAIL_URI
         )
+        private const val CONTACT_ID_INDEX = 0
+        private const val CONTACT_DISPLAY_NAME_INDEX = 1
+        private const val CONTACT_PHOTO_URI_INDEX = 2
 
-        // The column index for the _ID column
-        private const val CONTACT_ID_INDEX: Int = 0
-
-        // The column index for the CONTACT_KEY column
-        private const val CONTACT_KEY_INDEX: Int = 1
         private const val SELECTION: String =
             "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
     }
@@ -46,7 +41,7 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
     var contactId: Long = 0
     var contactKey: String? = null
     var contactUri: Uri? = null
-    private var cursorAdapter: SimpleCursorAdapter? = null
+    private var cursorAdapter: ContactCursorAdapter? = null
     private var searchString: String? = null
     private val selectionArgs: Array<String> = arrayOf("")
 
@@ -56,22 +51,6 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
         savedInstanceState: Bundle?
     ): View {
         return inflater.inflate(R.layout.contacts_list_view, container, false)
-    }
-
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        super.onActivityCreated(savedInstanceState)
-        activity?.also {
-            cursorAdapter = SimpleCursorAdapter(
-                it,
-                R.layout.contact_list_item,
-                null,
-                FROM_COLUMNS, TO_IDS,
-                0
-            )
-            val contactListView = it.findViewById<ListView>(R.layout.contacts_list_view)
-            contactListView.adapter = cursorAdapter
-            // TODO: Set click listener
-        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,8 +74,12 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
         } ?: throw IllegalStateException()
 
     override fun onLoadFinished(loader: Loader<Cursor>, cursor: Cursor) {
-        // Put the result Cursor in the adapter for the ListView
-        cursorAdapter?.swapCursor(cursor)
+        activity?.also {
+            val contactListView = it.findViewById<ListView>(R.id.lvItems)
+            cursorAdapter = ContactCursorAdapter(it, cursor)
+            contactListView.adapter = cursorAdapter
+            // TODO: Set click listener
+        }
     }
 
     override fun onLoaderReset(loader: Loader<Cursor>) {
@@ -105,6 +88,7 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
     }
 
     override fun onItemClick(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+        /*
         // Get the Cursor
         val cursor: Cursor? = (parent.adapter as? CursorAdapter)?.cursor?.apply {
             // Move to the selected contact
@@ -115,10 +99,28 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
             contactKey = getString(CONTACT_KEY_INDEX)
             // Create the contact's content Uri
             contactUri = ContactsContract.Contacts.getLookupUri(contactId, contactKey)
-            /*
-             * You can use contactUri as the content URI for retrieving
-             * the details for a contact.
-             */
+        }
+
+         */
+    }
+
+    class ContactCursorAdapter(
+        context: Context,
+        cursor: Cursor
+    ) : CursorAdapter(context, cursor, 0) {
+        override fun newView(context: Context?, cursor: Cursor?, parent: ViewGroup?) =
+            LayoutInflater.from(context).inflate(R.layout.contact_list_item, parent, false)
+
+        override fun bindView(view: View?, context: Context?, cursor: Cursor?) {
+            cursor?.let {
+                val displayName = it.getString(ContactFragment.CONTACT_DISPLAY_NAME_INDEX)
+                val displayNameView = view?.findViewById<TextView>(R.id.tvContactDisplayName)
+                displayNameView?.text = displayName
+                it.getString(CONTACT_PHOTO_URI_INDEX)?.let { photoString ->
+                    val iconView = view?.findViewById<ImageView>(R.id.ivContactPhoto)
+                    iconView?.setImageURI(Uri.parse(photoString))
+                }
+            }
         }
     }
 }
