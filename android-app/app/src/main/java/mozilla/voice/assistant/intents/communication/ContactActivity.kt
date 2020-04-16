@@ -1,30 +1,36 @@
 package mozilla.voice.assistant.intents.communication
 
+import android.Manifest
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.BaseColumns
 import android.provider.ContactsContract
 import android.util.Log
+import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import kotlinx.android.synthetic.main.contact_activity.*
 import java.util.Locale
-import kotlinx.android.synthetic.main.contact_fragment.*
+import kotlinx.android.synthetic.main.contacts_list_view.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mozilla.voice.assistant.R
 import mozilla.voice.assistant.intents.communication.ui.contact.ContactDatabase
 import mozilla.voice.assistant.intents.communication.ui.contact.ContactEntity
+import mozilla.voice.assistant.intents.communication.ui.contact.ContactFragment
 import mozilla.voice.assistant.intents.communication.ui.contact.ContactRepository
 
 class ContactActivity : FragmentActivity() {
-    private lateinit var viewModel: ContactViewModel
+    internal lateinit var viewModel: ContactViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.e(TAG, "Entering onCreate()")
@@ -49,11 +55,46 @@ class ContactActivity : FragmentActivity() {
             return
         }
         // 2. Search device contacts.
+        getPermissions()
+    }
 
+    private suspend fun getPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), PERMISSIONS_REQUEST)
+        } else {
+            seekContactsWithNickname()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSIONS_REQUEST) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                seekContactsWithNickname()
+            } else {
+                Toast.makeText(this, "Unable to proceed without permissions", Toast.LENGTH_LONG)
+                    .show()
+            }
+        }
+    }
+
+    private fun seekContactsWithNickname() {
+        val contactFragment = ContactFragment.newInstance()
+        supportFragmentManager.beginTransaction()
+            .add(R.id.fragment_container, contactFragment)
+            .commit()
+
+        /*
         // 3. Start contact picker.
         withContext(Dispatchers.Main) {
             startContactPicker()
         }
+
+         */
     }
 
     private fun buildModel() =
@@ -134,6 +175,7 @@ class ContactActivity : FragmentActivity() {
     companion object {
         internal const val TAG = "ContactActivity"
         private const val SELECT_CONTACT_FOR_NICKNAME = 1
+        private const val PERMISSIONS_REQUEST = 100
         internal const val UTTERANCE_KEY = "utterance"
         internal const val MODE_KEY = "mode"
         internal const val SMS_MODE = "sms"

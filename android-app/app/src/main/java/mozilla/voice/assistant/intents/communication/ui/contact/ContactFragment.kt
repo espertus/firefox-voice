@@ -16,6 +16,7 @@ import androidx.loader.app.LoaderManager
 import androidx.loader.content.CursorLoader
 import androidx.loader.content.Loader
 import mozilla.voice.assistant.R
+import mozilla.voice.assistant.intents.communication.ContactActivity
 
 class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, AdapterView.OnItemClickListener {
     companion object {
@@ -42,12 +43,11 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
     }
 
     // Support for list of partially matching contacts
-    lateinit var contactsList: ListView
     var contactId: Long = 0
     var contactKey: String? = null
     var contactUri: Uri? = null
     private var cursorAdapter: SimpleCursorAdapter? = null
-    private var mSearchString: String? = null
+    private var searchString: String? = null
     private val selectionArgs: Array<String> = arrayOf("")
 
     override fun onCreateView(
@@ -55,18 +55,36 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        return inflater.inflate(R.layout.contact_fragment, container, false)
+        return inflater.inflate(R.layout.contacts_list_view, container, false)
     }
 
-    override fun onCreateLoader(loaderId: Int, args: Bundle?): Loader<Cursor> {
-        /*
-         * Makes search string into pattern and
-         * stores it in the selection array
-         */
-        selectionArgs[0] = "%$mSearchString%"
-        // Starts the query
-        return activity?.let {
-            return CursorLoader(
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+        super.onActivityCreated(savedInstanceState)
+        activity?.also {
+            cursorAdapter = SimpleCursorAdapter(
+                it,
+                R.layout.contact_list_item,
+                null,
+                FROM_COLUMNS, TO_IDS,
+                0
+            )
+            val contactListView = it.findViewById<ListView>(R.layout.contacts_list_view)
+            contactListView.adapter = cursorAdapter
+            // TODO: Set click listener
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        loaderManager.initLoader(0, null, this)
+    }
+
+    override fun onCreateLoader(loaderId: Int, args: Bundle?): Loader<Cursor> =
+        activity?.let {
+            val contactActivity = it as? ContactActivity
+            searchString = contactActivity?.viewModel?.nickname
+            selectionArgs[0] = "%$searchString%"
+            CursorLoader(
                 it,
                 ContactsContract.Contacts.CONTENT_URI,
                 PROJECTION,
@@ -75,7 +93,6 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
                 null
             )
         } ?: throw IllegalStateException()
-    }
 
     override fun onLoadFinished(loader: Loader<Cursor>, cursor: Cursor) {
         // Put the result Cursor in the adapter for the ListView
@@ -102,19 +119,6 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
              * You can use contactUri as the content URI for retrieving
              * the details for a contact.
              */
-        }
-    }
-
-    private fun searchContactsForNickname() {
-        activity?.also {
-            cursorAdapter = SimpleCursorAdapter(
-                it,
-                R.layout.contact_list_item,
-                null,
-                FROM_COLUMNS, TO_IDS,
-                0
-            )
-            contactsList.adapter = cursorAdapter
         }
     }
 }
