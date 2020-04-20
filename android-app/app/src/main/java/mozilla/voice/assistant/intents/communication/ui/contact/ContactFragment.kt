@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment
 import kotlinx.android.synthetic.main.contacts_fragment.*
 import mozilla.voice.assistant.R
 import mozilla.voice.assistant.intents.communication.ContactActivity
+import java.util.Locale
 
 class ContactFragment(
     private val cursor: Cursor
@@ -42,9 +43,11 @@ class ContactFragment(
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
-        activity?.let {
+        (activity as? ContactActivity)?.let {
+            val nickname = it.viewModel.nickname.capitalize()
+            contactStatusView.text = "Found ${cursor.count} matches.\nSay or tap the $nickname you want."
             cursorAdapter = ContactCursorAdapter(it, cursor)
-            lvItems.adapter = cursorAdapter
+            contactsList.adapter = cursorAdapter
         }
     }
 

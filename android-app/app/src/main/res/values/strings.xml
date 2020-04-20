@@ -7,6 +7,7 @@
     <string name="suggestion_prefix">You can say things like</string>
     <string name="no_match">I didn\'t understand that. Try again.</string>
     <string name="no_speech">I didn\'t catch that. Try again.</string>
+    <string name="remember_contact_choice">Remember this choice for next time</string>
     <string-array name="sample_phrases">
         <item>Translate \"ich bin ein berliner\" into English</item>
         <item>How is sausage made?</item>

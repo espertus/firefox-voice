@@ -24,6 +24,18 @@
         android:orientation="horizontal"
         app:layout_constraintGuide_percent=".2" />
 
+    <CheckBox
+        android:id="@+id/contactsCheckBox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="76dp"
+        android:layout_marginBottom="64dp"
+        android:text="@string/remember_contact_choice"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/contactStatusView"
+        app:layout_constraintVertical_bias="0.12" />
+
     <androidx.constraintlayout.widget.Guideline
         android:id="@+id/left_guideline"
         android:layout_width="wrap_content"
@@ -38,13 +50,13 @@
         android:orientation="vertical"
         app:layout_constraintGuide_percent="0.9" />
 
-    <ListView xmlns:android="http://schemas.android.com/apk/res/android"
-        android:id="@+id/lvItems"
+    <ListView
+        android:id="@+id/contactsList"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="@id/left_guideline"
         app:layout_constraintRight_toRightOf="@id/right_guideline"
-        app:layout_constraintTop_toBottomOf="@id/top_guideline" />
+        app:layout_constraintTop_toBottomOf="@id/contactsCheckBox" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
