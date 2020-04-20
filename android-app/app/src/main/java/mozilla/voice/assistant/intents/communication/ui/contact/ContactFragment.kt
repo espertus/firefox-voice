@@ -4,43 +4,26 @@ import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
-import android.provider.ContactsContract
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ImageView
-import android.widget.ListView
 import android.widget.TextView
 import androidx.cursoradapter.widget.CursorAdapter
 import androidx.fragment.app.Fragment
-import androidx.loader.app.LoaderManager
-import androidx.loader.content.CursorLoader
-import androidx.loader.content.Loader
+import kotlinx.android.synthetic.main.contacts_fragment.*
 import mozilla.voice.assistant.R
 import mozilla.voice.assistant.intents.communication.ContactActivity
 
-class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, AdapterView.OnItemClickListener {
+class ContactFragment(
+    private val cursor: Cursor
+) : Fragment(), AdapterView.OnItemClickListener {
     companion object {
-        fun newInstance() = ContactFragment()
         private const val TAG = "ContactFragment"
-        private val PROJECTION: Array<out String> = arrayOf(
-            ContactsContract.Contacts._ID,
-            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
-            ContactsContract.Contacts.PHOTO_THUMBNAIL_URI
-        )
-        private const val CONTACT_ID_INDEX = 0
-        private const val CONTACT_DISPLAY_NAME_INDEX = 1
-        private const val CONTACT_PHOTO_URI_INDEX = 2
-
-        private const val SELECTION: String =
-            "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
     }
 
     // Support for list of partially matching contacts
-    var contactId: Long = 0
-    var contactKey: String? = null
-    var contactUri: Uri? = null
     private var cursorAdapter: ContactCursorAdapter? = null
     private var searchString: String? = null
     private val selectionArgs: Array<String> = arrayOf("")
@@ -50,41 +33,19 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        return inflater.inflate(R.layout.contacts_list_view, container, false)
+        return inflater.inflate(R.layout.contacts_fragment, container, false)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        loaderManager.initLoader(0, null, this)
     }
 
-    override fun onCreateLoader(loaderId: Int, args: Bundle?): Loader<Cursor> =
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+        super.onActivityCreated(savedInstanceState)
         activity?.let {
-            val contactActivity = it as? ContactActivity
-            searchString = contactActivity?.viewModel?.nickname
-            selectionArgs[0] = "%$searchString%"
-            CursorLoader(
-                it,
-                ContactsContract.Contacts.CONTENT_URI,
-                PROJECTION,
-                SELECTION,
-                selectionArgs,
-                null
-            )
-        } ?: throw IllegalStateException()
-
-    override fun onLoadFinished(loader: Loader<Cursor>, cursor: Cursor) {
-        activity?.also {
-            val contactListView = it.findViewById<ListView>(R.id.lvItems)
             cursorAdapter = ContactCursorAdapter(it, cursor)
-            contactListView.adapter = cursorAdapter
-            // TODO: Set click listener
+            lvItems.adapter = cursorAdapter
         }
-    }
-
-    override fun onLoaderReset(loader: Loader<Cursor>) {
-        // Delete the reference to the existing Cursor
-        cursorAdapter?.swapCursor(null)
     }
 
     override fun onItemClick(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
@@ -113,10 +74,10 @@ class ContactFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor>, Adapt
 
         override fun bindView(view: View?, context: Context?, cursor: Cursor?) {
             cursor?.let {
-                val displayName = it.getString(ContactFragment.CONTACT_DISPLAY_NAME_INDEX)
+                val displayName = it.getString(ContactActivity.CONTACT_DISPLAY_NAME_INDEX)
                 val displayNameView = view?.findViewById<TextView>(R.id.tvContactDisplayName)
                 displayNameView?.text = displayName
-                it.getString(CONTACT_PHOTO_URI_INDEX)?.let { photoString ->
+                it.getString(ContactActivity.CONTACT_PHOTO_URI_INDEX)?.let { photoString ->
                     val iconView = view?.findViewById<ImageView>(R.id.ivContactPhoto)
                     iconView?.setImageURI(Uri.parse(photoString))
                 }

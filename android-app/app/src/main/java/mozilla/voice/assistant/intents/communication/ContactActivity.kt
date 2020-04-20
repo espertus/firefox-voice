@@ -5,20 +5,24 @@ import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.BaseColumns
 import android.provider.ContactsContract
 import android.util.Log
+import android.widget.CursorAdapter
 import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.loader.app.LoaderManager
+import androidx.loader.content.CursorLoader
+import androidx.loader.content.Loader
 import java.util.Locale
-import kotlinx.android.synthetic.main.contact_activity.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -39,7 +43,6 @@ class ContactActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        contactRequestView.text = intent?.getStringExtra(UTTERANCE_KEY)
         viewModel = buildModel()
         viewModel.viewModelScope.launch {
             searchDatabaseForNickname()
@@ -59,7 +62,8 @@ class ContactActivity : FragmentActivity() {
 
     private suspend fun getPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-            checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), PERMISSIONS_REQUEST)
         } else {
             seekContactsWithNickname()
@@ -83,12 +87,14 @@ class ContactActivity : FragmentActivity() {
     }
 
     private fun seekContactsWithNickname() {
+        val contactLoader: LoaderManager.LoaderCallbacks<Cursor> = ContactLoader()
+        LoaderManager.getInstance(this).initLoader(0, null, contactLoader)
+        /*
         val contactFragment = ContactFragment.newInstance()
         supportFragmentManager.beginTransaction()
             .add(R.id.fragment_container, contactFragment)
             .commit()
 
-        /*
         // 3. Start contact picker.
         withContext(Dispatchers.Main) {
             startContactPicker()
@@ -133,6 +139,9 @@ class ContactActivity : FragmentActivity() {
         )
     }
 
+    // Called by fragment when it has resolved the contact.
+    internal fun resolveContact() {}
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         Log.e(TAG, "Entering onActivityResult()")
         super.onActivityResult(requestCode, resultCode, data)
@@ -172,6 +181,54 @@ class ContactActivity : FragmentActivity() {
         }
     }
 
+    private fun addContact() {
+        // TODO: Add contact to database.
+        // TODO: Launch activity.
+    }
+
+    private fun addContactFragment(cursor: Cursor) {
+        val ft = supportFragmentManager.beginTransaction()
+        ft.replace(R.id.fragment_container, ContactFragment(cursor))
+        ft.commit()
+    }
+
+    private fun addNoContactFragment() {
+        // TODO: Ask user to pick a contact.
+    }
+
+    inner class ContactLoader : LoaderManager.LoaderCallbacks<Cursor> {
+        private lateinit var cursorAdapter: CursorAdapter
+
+        override fun onCreateLoader(loaderId: Int, args: Bundle?): Loader<Cursor> {
+            val nickname = viewModel?.nickname
+            return CursorLoader(
+                this@ContactActivity,
+                ContactsContract.Contacts.CONTENT_URI,
+                PROJECTION,
+                SELECTION,
+                arrayOf("$nickname %", "% $nickname"),
+                null
+            )
+        }
+
+        override fun onLoadFinished(loader: Loader<Cursor>, cursor: Cursor) {
+            Log.e(TAG, "Finished loading")
+            when (cursor.count) {
+                0 -> run {
+                    cursor.close()
+                    addNoContactFragment()
+                }
+                1 -> addContact()
+                else -> addContactFragment(cursor)
+            }
+        }
+
+        override fun onLoaderReset(loader: Loader<Cursor>) {
+            // Delete the reference to the existing Cursor
+            cursorAdapter?.swapCursor(null)
+        }
+    }
+
     companion object {
         internal const val TAG = "ContactActivity"
         private const val SELECT_CONTACT_FOR_NICKNAME = 1
@@ -181,6 +238,19 @@ class ContactActivity : FragmentActivity() {
         internal const val SMS_MODE = "sms"
         internal const val PHONE_MODE = "phone"
         internal const val NICKNAME_KEY = "nickname"
+
+        private val PROJECTION: Array<out String> = arrayOf(
+            ContactsContract.Contacts._ID,
+            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
+            ContactsContract.Contacts.PHOTO_THUMBNAIL_URI
+        )
+        internal const val CONTACT_ID_INDEX = 0
+        internal const val CONTACT_DISPLAY_NAME_INDEX = 1
+        internal const val CONTACT_PHOTO_URI_INDEX = 2
+
+        private const val SELECTION: String =
+            "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ? OR " +
+                    "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
     }
 }
 
