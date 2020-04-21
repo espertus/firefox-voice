@@ -197,16 +197,25 @@ class ContactActivity : FragmentActivity() {
     }
 
     inner class ContactLoader : LoaderManager.LoaderCallbacks<Cursor> {
-        private lateinit var cursorAdapter: CursorAdapter
+        private var cursorAdapter: CursorAdapter? = null
+
+        internal fun registerAdapter(adapter: CursorAdapter) {
+            cursorAdapter = adapter
+        }
 
         override fun onCreateLoader(loaderId: Int, args: Bundle?): Loader<Cursor> {
-            val nickname = viewModel?.nickname
+            val nickname = viewModel.nickname
             return CursorLoader(
                 this@ContactActivity,
                 ContactsContract.Contacts.CONTENT_URI,
                 PROJECTION,
                 SELECTION,
-                arrayOf("$nickname %", "% $nickname"),
+                arrayOf(
+                    nickname, // just the nickname
+                    "$nickname %", // first name
+                    "% $nickname", // last name
+                    "% $nickname %" // middle name
+                ),
                 null
             )
         }
@@ -224,7 +233,6 @@ class ContactActivity : FragmentActivity() {
         }
 
         override fun onLoaderReset(loader: Loader<Cursor>) {
-            // Delete the reference to the existing Cursor
             cursorAdapter?.swapCursor(null)
         }
     }
@@ -241,16 +249,20 @@ class ContactActivity : FragmentActivity() {
 
         private val PROJECTION: Array<out String> = arrayOf(
             ContactsContract.Contacts._ID,
+            ContactsContract.Contacts.LOOKUP_KEY,
             ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
             ContactsContract.Contacts.PHOTO_THUMBNAIL_URI
         )
         internal const val CONTACT_ID_INDEX = 0
-        internal const val CONTACT_DISPLAY_NAME_INDEX = 1
-        internal const val CONTACT_PHOTO_URI_INDEX = 2
+        internal const val CONTACT_KEY_INDEX = 1
+        internal const val CONTACT_DISPLAY_NAME_INDEX = 2
+        internal const val CONTACT_PHOTO_URI_INDEX = 3
 
-        private const val SELECTION: String =
-            "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ? OR " +
-                    "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
+        private const val TERM = "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
+        private val SELECTION: String =
+            generateSequence { TERM }
+            .take(4)
+            .joinToString(separator = " OR ")
     }
 }
 

@@ -26,8 +26,6 @@ class ContactFragment(
 
     // Support for list of partially matching contacts
     private var cursorAdapter: ContactCursorAdapter? = null
-    private var searchString: String? = null
-    private val selectionArgs: Array<String> = arrayOf("")
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -35,10 +33,6 @@ class ContactFragment(
         savedInstanceState: Bundle?
     ): View {
         return inflater.inflate(R.layout.contacts_fragment, container, false)
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
