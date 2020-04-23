@@ -53,14 +53,16 @@ class ContactActivity : FragmentActivity() {
         // 1. Try to find an exact match in our database.
         val entity = viewModel.getContact()
         if (entity != null) {
+            // TODO: Currently, bad things will happen if a voice request is made for a user
+            // who only has an SMS number, or vice versa.
             initiateRequestedActivity(entity)
             return
         }
-        // 2. Search device contacts.
+        // 2. Search device contacts by calling seekContactsWithNickname() indirectly.
         getPermissions()
     }
 
-    private suspend fun getPermissions() {
+    private fun getPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
             checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -114,14 +116,14 @@ class ContactActivity : FragmentActivity() {
             )
         ).get(ContactViewModel::class.java)
 
-    private fun initiateRequestedActivity(contact: ContactEntity) {
+    internal fun initiateRequestedActivity(contact: ContactEntity) {
         val intent = when (viewModel.mode) {
-            ContactActivity.PHONE_MODE -> Intent(Intent.ACTION_DIAL).apply {
-                data = Uri.parse("tel: ${contact.phone}")
+            VOICE_MODE -> Intent(Intent.ACTION_DIAL).apply {
+                data = Uri.parse("tel: ${contact.voiceNumber}")
             }
-            ContactActivity.SMS_MODE -> Intent(
+            SMS_MODE -> Intent(
                 Intent.ACTION_VIEW,
-                Uri.fromParts("sms", contact.phone, null)
+                Uri.fromParts("sms", contact.smsNumber, null)
             )
             else -> throw AssertionError("Illegal mode: ${viewModel.mode}")
         }
@@ -129,35 +131,10 @@ class ContactActivity : FragmentActivity() {
         finish()
     }
 
-    private fun startContactPicker() {
-        Log.e(TAG, "About to start contact intent")
-        startActivityForResult(
-            Intent(Intent.ACTION_PICK).apply {
-                type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
-            },
-            SELECT_CONTACT_FOR_NICKNAME
-        )
-    }
-
     // Called by fragment when it has resolved the contact.
     internal fun resolveContact() {}
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        Log.e(TAG, "Entering onActivityResult()")
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == SELECT_CONTACT_FOR_NICKNAME) {
-            if (resultCode == Activity.RESULT_OK) {
-                // TODO: Handle other cases
-                data?.data?.let {
-                    val contact = getContact(it)
-                    viewModel.insert(contact)
-                    initiateRequestedActivity(contact)
-                    finish()
-                }
-            }
-        }
-    }
-
+    /*
     private fun getContact(contactUri: Uri): ContactEntity {
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY,
@@ -170,9 +147,11 @@ class ContactActivity : FragmentActivity() {
         if (cursor != null && cursor.moveToFirst()) {
             val newContact = ContactEntity(
                 viewModel.nickname,
-                cursor.getString(0), // DISPLAY_NAME_PRIMARY
-                cursor.getLong(1), // _ID
-                cursor.getString(2) // NORMALIZED_NUMBER
+                cursor.getString(0),
+                cursor.getLong(1),
+                // For now, use same number for both.
+                cursor.getString(2),
+                cursor.getString(2)
             )
             cursor.close()
             return newContact
@@ -181,9 +160,10 @@ class ContactActivity : FragmentActivity() {
         }
     }
 
-    private fun addContact() {
-        // TODO: Add contact to database.
-        // TODO: Launch activity.
+     */
+
+    internal fun addContact(contactEntity: ContactEntity) {
+        viewModel.insert(contactEntity)
     }
 
     private fun addContactFragment(cursor: Cursor) {
@@ -194,6 +174,27 @@ class ContactActivity : FragmentActivity() {
 
     private fun addNoContactFragment() {
         // TODO: Ask user to pick a contact.
+    }
+
+    internal fun cursorToContactEntity(
+        contactActivity: ContactActivity,
+        cursor: Cursor,
+        position: Int
+    ): ContactEntity {
+        val nickname = contactActivity.viewModel.nickname
+        val mode = contactActivity.viewModel.mode
+        cursor.moveToPosition(position)
+        val id = cursor.getLong(ContactActivity.CONTACT_ID_INDEX)
+        val key = cursor.getString(CONTACT_LOOKUP_KEY_INDEX)
+        val bestNumber = ContactNumber.getBestNumber(contactActivity, key, id)
+        // TODO: Currently, bestNumber could be null. Handle this case.
+        return ContactEntity(
+            nickname,
+            cursor.getString(ContactActivity.CONTACT_DISPLAY_NAME_INDEX),
+            id,
+            if (mode == ContactActivity.SMS_MODE) bestNumber else null,
+            if (mode == ContactActivity.VOICE_MODE) bestNumber else null
+        )
     }
 
     inner class ContactLoader : LoaderManager.LoaderCallbacks<Cursor> {
@@ -221,16 +222,22 @@ class ContactActivity : FragmentActivity() {
         }
 
         override fun onLoadFinished(loader: Loader<Cursor>, cursor: Cursor) {
-            Log.e(TAG, "Finished loading")
             when (cursor.count) {
                 0 -> run {
                     cursor.close()
                     addNoContactFragment()
                 }
-                1 -> addContact()
-                else -> addContactFragment(cursor)
+                1 -> cursor.use { cursor ->
+                    (cursorToContactEntity(this@ContactActivity, cursor, 0)).let {
+                        addContact(it)
+                        initiateRequestedActivity(it)
+                    }
+                }
+                else -> addContactFragment(cursor) // TODO: close cursor
             }
         }
+
+
 
         override fun onLoaderReset(loader: Loader<Cursor>) {
             cursorAdapter?.swapCursor(null)
@@ -244,19 +251,21 @@ class ContactActivity : FragmentActivity() {
         internal const val UTTERANCE_KEY = "utterance"
         internal const val MODE_KEY = "mode"
         internal const val SMS_MODE = "sms"
-        internal const val PHONE_MODE = "phone"
+        internal const val VOICE_MODE = "phone"
         internal const val NICKNAME_KEY = "nickname"
 
         private val PROJECTION: Array<out String> = arrayOf(
             ContactsContract.Contacts._ID,
             ContactsContract.Contacts.LOOKUP_KEY,
             ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
-            ContactsContract.Contacts.PHOTO_THUMBNAIL_URI
+            ContactsContract.Contacts.PHOTO_THUMBNAIL_URI,
+            ContactsContract.Contacts.HAS_PHONE_NUMBER
         )
         internal const val CONTACT_ID_INDEX = 0
-        internal const val CONTACT_KEY_INDEX = 1
+        internal const val CONTACT_LOOKUP_KEY_INDEX = 1
         internal const val CONTACT_DISPLAY_NAME_INDEX = 2
         internal const val CONTACT_PHOTO_URI_INDEX = 3
+        internal const val CONTACT_HAS_PHONE_NUMBER = 4
 
         private const val TERM = "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
         private val SELECTION: String =

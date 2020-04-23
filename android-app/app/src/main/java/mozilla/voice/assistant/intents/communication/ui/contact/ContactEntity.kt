@@ -20,7 +20,8 @@ data class ContactEntity(
     @PrimaryKey @ColumnInfo(name = "nickname") val nickname: String,
     @ColumnInfo(name = "name") val name: String,
     @ColumnInfo(name = "contactId") val contactId: Long, // foreign key to phone's contact DB
-    @ColumnInfo(name = "phone") val phone: String
+    @ColumnInfo(name = "smsNumber") val smsNumber: String?,
+    @ColumnInfo(name = "voiceNumber") val voiceNumber: String?
 )
 
 @Dao
@@ -38,7 +39,7 @@ interface ContactDao {
     fun insert(contact: ContactEntity)
 }
 
-@Database(entities = arrayOf(ContactEntity::class), version = 3)
+@Database(entities = arrayOf(ContactEntity::class), version = 1)
 abstract class ContactDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
 
@@ -61,7 +62,8 @@ abstract class ContactDatabase : RoomDatabase() {
                     "Mom",
                     "Mother Hubbard",
                     31L,
-                    "513-555-1212"
+                    "513-555-1212",
+                    "513-555-1213"
                 )
             )
         }

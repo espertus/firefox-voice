@@ -15,7 +15,6 @@ import androidx.fragment.app.Fragment
 import kotlinx.android.synthetic.main.contacts_fragment.*
 import mozilla.voice.assistant.R
 import mozilla.voice.assistant.intents.communication.ContactActivity
-import java.util.Locale
 
 class ContactFragment(
     private val cursor: Cursor
@@ -39,27 +38,23 @@ class ContactFragment(
         super.onActivityCreated(savedInstanceState)
         (activity as? ContactActivity)?.let {
             val nickname = it.viewModel.nickname.capitalize()
-            contactStatusView.text = "Found ${cursor.count} matches.\nSay or tap the $nickname you want."
+            contactStatusView.text =
+                "Found ${cursor.count} matches.\nSay or tap the $nickname you want."
             cursorAdapter = ContactCursorAdapter(it, cursor)
             contactsList.adapter = cursorAdapter
+            contactsList.onItemClickListener = this
         }
     }
 
     override fun onItemClick(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-        /*
-        // Get the Cursor
-        val cursor: Cursor? = (parent.adapter as? CursorAdapter)?.cursor?.apply {
-            // Move to the selected contact
-            moveToPosition(position)
-            // Get the _ID value
-            contactId = getLong(CONTACT_ID_INDEX)
-            // Get the selected LOOKUP KEY
-            contactKey = getString(CONTACT_KEY_INDEX)
-            // Create the contact's content Uri
-            contactUri = ContactsContract.Contacts.getLookupUri(contactId, contactKey)
+        (activity as? ContactActivity)?.let { contactActivity ->
+            contactActivity.cursorToContactEntity(contactActivity, cursor, position).let {
+                if (contactsCheckBox.isChecked) {
+                    contactActivity.addContact(it)
+                }
+                contactActivity.initiateRequestedActivity(it)
+            }
         }
-
-         */
     }
 
     class ContactCursorAdapter(
