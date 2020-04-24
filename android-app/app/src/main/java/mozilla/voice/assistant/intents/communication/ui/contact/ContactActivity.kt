@@ -1,6 +1,7 @@
 package mozilla.voice.assistant.intents.communication.ui.contact
 
 import android.Manifest
+import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -19,10 +20,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.loader.app.LoaderManager
 import androidx.loader.content.CursorLoader
 import androidx.loader.content.Loader
-import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.android.synthetic.main.contact_activity.*
-import kotlinx.android.synthetic.main.no_contacts_fragment.*
 import java.util.Locale
+import kotlinx.android.synthetic.main.contact_activity.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,10 +30,12 @@ import mozilla.voice.assistant.intents.communication.ContactDatabase
 import mozilla.voice.assistant.intents.communication.ContactEntity
 import mozilla.voice.assistant.intents.communication.ContactRepository
 import mozilla.voice.assistant.intents.communication.contactIdToContactEntity
+import mozilla.voice.assistant.intents.communication.contactUriToContactEntity
 
 class ContactActivity : FragmentActivity() {
     internal lateinit var viewModel: ContactViewModel
-    internal var contactLoader: ContactLoader? = null
+    private var contactLoader: ContactLoader? = null
+    private var cursorAdapter: CursorAdapter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,7 +68,8 @@ class ContactActivity : FragmentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
             checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
         ) {
-            requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS),
+            requestPermissions(
+                arrayOf(Manifest.permission.READ_CONTACTS),
                 PERMISSIONS_REQUEST
             )
         } else {
@@ -131,13 +133,60 @@ class ContactActivity : FragmentActivity() {
     private fun processMultipleContacts(cursor: Cursor) {
         //   contactsViewAnimator.displayedChild = R.id.contactsList
         contactStatusView.text = "Multiple matches for ${viewModel?.nickname}"
-        //    contactsViewAnimator.showNext()
+        ContactCursorAdapter(this, cursor).let { adapter ->
+            cursorAdapter = adapter
+            contactLoader?.registerAdapter(adapter)
+            contactsList.adapter = adapter
+            contactsList.setOnItemClickListener { parent, view, position, id ->
+                cursor.use {
+                    it.moveToPosition(position)
+                    contactIdToContactEntity(
+                        this@ContactActivity,
+                        it.getLong(CONTACT_ID_INDEX)
+                    ).let { contactEntity ->
+                        if (contactsCheckBox.isChecked) {
+                            addContact(contactEntity)
+                        }
+                        initiateRequestedActivity(contactEntity)
+                    }
+                }
+            }
+        }
     }
 
     private fun processZeroContacts() {
-        contactsViewAnimator.displayedChild = R.id.noContactsButton
+        // contactsViewAnimator.displayedChild = R.id.noContactsButton
         contactStatusView.text = "No matches for ${viewModel?.nickname}."
-        //contactsViewAnimator.showNext()
+        contactsViewAnimator.showNext()
+        noContactsButton.setOnClickListener {
+            startContactPicker()
+        }
+    }
+
+    private fun startContactPicker() {
+        startActivityForResult(
+            Intent(Intent.ACTION_PICK).apply {
+                type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+            },
+            SELECT_CONTACT_FOR_NICKNAME
+        )
+    }
+
+    @SuppressWarnings("NestedBlockDepth")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == SELECT_CONTACT_FOR_NICKNAME) {
+            if (resultCode == Activity.RESULT_OK) {
+                // TODO: Handle other cases
+                data?.data?.let {
+                    contactUriToContactEntity(this, it)
+                        .let { contactEntity ->
+                            addContact(contactEntity)
+                            initiateRequestedActivity(contactEntity)
+                        }
+                }
+            }
+        }
     }
 
     inner class ContactLoader : LoaderManager.LoaderCallbacks<Cursor> {
@@ -180,7 +229,7 @@ class ContactActivity : FragmentActivity() {
                         initiateRequestedActivity(contactEntity)
                     }
                 }
-                else -> processMultipleContacts(cursor) // cursor closed by MultipleContactsFragment
+                else -> processMultipleContacts(cursor) // cursor closed by callee
             }
         }
 
@@ -197,6 +246,7 @@ class ContactActivity : FragmentActivity() {
         internal const val SMS_MODE = "sms"
         internal const val VOICE_MODE = "phone"
         internal const val NICKNAME_KEY = "nickname"
+        private const val SELECT_CONTACT_FOR_NICKNAME = 1
 
         private val PROJECTION: Array<out String> = arrayOf(
             ContactsContract.Contacts._ID,
@@ -212,9 +262,10 @@ class ContactActivity : FragmentActivity() {
         internal const val CONTACT_HAS_PHONE_NUMBER = 4
 
         private const val TERM = "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
+        private const val NUM_TERMS = 4 // exact match, first name, last name, middle name
         private val SELECTION: String =
             generateSequence { TERM }
-            .take(4)
+            .take(NUM_TERMS)
             .joinToString(separator = " OR ")
     }
 }
