@@ -9,7 +9,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract
-import android.util.Log
 import android.widget.Toast
 import androidx.cursoradapter.widget.CursorAdapter
 import androidx.fragment.app.FragmentActivity
@@ -27,15 +26,14 @@ import kotlinx.coroutines.withContext
 import mozilla.voice.assistant.R
 import mozilla.voice.assistant.intents.communication.ContactDatabase
 import mozilla.voice.assistant.intents.communication.ContactEntity
-import mozilla.voice.assistant.intents.communication.ContactNumber
 import mozilla.voice.assistant.intents.communication.ContactRepository
+import mozilla.voice.assistant.intents.communication.contactIdToContactEntity
 
 class ContactActivity : FragmentActivity() {
     internal lateinit var viewModel: ContactViewModel
     internal var contactLoader: ContactLoader? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        Log.e(TAG, "Entering onCreate()")
         super.onCreate(savedInstanceState)
         setContentView(R.layout.contact_activity)
     }
@@ -49,15 +47,14 @@ class ContactActivity : FragmentActivity() {
     }
 
     private suspend fun searchDatabaseForNickname() {
-        // 1. Try to find an exact match in our database.
+        // Try to find an exact match in our database.
         val entity = viewModel.getContact()
         if (entity != null) {
-            // TODO: Currently, bad things will happen if a voice request is made for a user
-            // who only has an SMS number, or vice versa.
             initiateRequestedActivity(entity)
             return
         }
-        // 2. Search device contacts by calling seekContactsWithNickname() indirectly.
+        // If there's no match in the database, get permissions,
+        // and call seekContactsWithNickname().
         getPermissions()
     }
 
@@ -135,7 +132,7 @@ class ContactActivity : FragmentActivity() {
 
     private fun addNoContactFragment() {
         supportFragmentManager.beginTransaction().apply {
-            replace(R.id.fragment_container, NoContactFragment())
+            replace(R.id.fragment_container, NoContactsFragment())
             commit()
         }
     }
@@ -172,7 +169,7 @@ class ContactActivity : FragmentActivity() {
                 }
                 1 -> cursor.use {
                     it.moveToNext()
-                    ContactNumber.contactIdToContactEntity(
+                    contactIdToContactEntity(
                         this@ContactActivity,
                         it.getLong(CONTACT_ID_INDEX)
                     ).let { contactEntity ->
@@ -191,7 +188,6 @@ class ContactActivity : FragmentActivity() {
 
     companion object {
         internal const val TAG = "ContactActivity"
-        private const val SELECT_CONTACT_FOR_NICKNAME = 1
         private const val PERMISSIONS_REQUEST = 100
         internal const val UTTERANCE_KEY = "utterance"
         internal const val MODE_KEY = "mode"
@@ -238,7 +234,7 @@ class ContactViewModel(
     val mode: String,
     val nickname: String
 ) : AndroidViewModel(application) {
-    val repository: ContactRepository
+    private val repository: ContactRepository
 
     init {
         val contactsDao = ContactDatabase.getDatabase(

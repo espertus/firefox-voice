@@ -14,7 +14,7 @@ import androidx.cursoradapter.widget.CursorAdapter
 import androidx.fragment.app.Fragment
 import kotlinx.android.synthetic.main.multiple_contacts_fragment.*
 import mozilla.voice.assistant.R
-import mozilla.voice.assistant.intents.communication.ContactNumber
+import mozilla.voice.assistant.intents.communication.contactIdToContactEntity
 
 class MultipleContactsFragment(
     private val cursor: Cursor
@@ -53,7 +53,7 @@ class MultipleContactsFragment(
         (activity as? ContactActivity)?.let { contactActivity ->
             cursor.use {
                 it.moveToPosition(position)
-                ContactNumber.contactIdToContactEntity(
+                contactIdToContactEntity(
                     contactActivity,
                     it.getLong(ContactActivity.CONTACT_ID_INDEX)
                 ).let { contactEntity ->
@@ -63,6 +63,14 @@ class MultipleContactsFragment(
                     contactActivity.initiateRequestedActivity(contactEntity)
                 }
             }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Close cursor if it wasn't closed in onItemClick().
+        if (!cursor.isClosed) {
+            cursor.close()
         }
     }
 

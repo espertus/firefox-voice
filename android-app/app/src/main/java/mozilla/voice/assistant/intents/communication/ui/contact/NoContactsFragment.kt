@@ -10,14 +10,14 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import kotlinx.android.synthetic.main.no_contacts_fragment.*
 import mozilla.voice.assistant.R
-import mozilla.voice.assistant.intents.communication.ContactNumber
+import mozilla.voice.assistant.intents.communication.contactUriToContactEntity
 
 /**
  * A simple [Fragment] subclass.
- * Use the [NoContactFragment.newInstance] factory method to
+ * Use the [NoContactsFragment.newInstance] factory method to
  * create an instance of this fragment.
  */
-class NoContactFragment : Fragment() {
+class NoContactsFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -51,7 +51,7 @@ class NoContactFragment : Fragment() {
                 // TODO: Handle other cases
                 data?.data?.let {
                     (activity as? ContactActivity)?.let { contactActivity ->
-                        ContactNumber.contactUriToContactEntity(contactActivity, it)
+                        contactUriToContactEntity(contactActivity, it)
                             .let { contactEntity ->
                                 contactActivity.addContact(contactEntity)
                                 contactActivity.initiateRequestedActivity(contactEntity)
