@@ -19,6 +19,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.loader.app.LoaderManager
 import androidx.loader.content.CursorLoader
 import androidx.loader.content.Loader
+import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.android.synthetic.main.contact_activity.*
+import kotlinx.android.synthetic.main.no_contacts_fragment.*
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,6 +47,8 @@ class ContactActivity : FragmentActivity() {
         viewModel.viewModelScope.launch {
             searchDatabaseForNickname()
         }
+        contactsViewAnimator.inAnimation = null
+        contactsViewAnimator.outAnimation = null
     }
 
     private suspend fun searchDatabaseForNickname() {
@@ -123,18 +128,16 @@ class ContactActivity : FragmentActivity() {
         viewModel.insert(contactEntity)
     }
 
-    private fun addMultipleContactsFragment(cursor: Cursor) {
-        supportFragmentManager.beginTransaction().apply {
-            replace(R.id.fragment_container, MultipleContactsFragment(cursor))
-            commit()
-        }
+    private fun processMultipleContacts(cursor: Cursor) {
+        //   contactsViewAnimator.displayedChild = R.id.contactsList
+        contactStatusView.text = "Multiple matches for ${viewModel?.nickname}"
+        //    contactsViewAnimator.showNext()
     }
 
-    private fun addNoContactFragment() {
-        supportFragmentManager.beginTransaction().apply {
-            replace(R.id.fragment_container, NoContactsFragment.newInstance())
-            commit()
-        }
+    private fun processZeroContacts() {
+        contactsViewAnimator.displayedChild = R.id.noContactsButton
+        contactStatusView.text = "No matches for ${viewModel?.nickname}."
+        //contactsViewAnimator.showNext()
     }
 
     inner class ContactLoader : LoaderManager.LoaderCallbacks<Cursor> {
@@ -165,7 +168,7 @@ class ContactActivity : FragmentActivity() {
             when (cursor.count) {
                 0 -> run {
                     cursor.close()
-                    addNoContactFragment()
+                    processZeroContacts()
                 }
                 1 -> cursor.use {
                     it.moveToNext()
@@ -177,7 +180,7 @@ class ContactActivity : FragmentActivity() {
                         initiateRequestedActivity(contactEntity)
                     }
                 }
-                else -> addMultipleContactsFragment(cursor) // cursor closed by MultipleContactsFragment
+                else -> processMultipleContacts(cursor) // cursor closed by MultipleContactsFragment
             }
         }
 
