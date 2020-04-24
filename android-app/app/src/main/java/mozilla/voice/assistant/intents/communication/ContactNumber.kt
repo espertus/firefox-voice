@@ -4,10 +4,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.provider.ContactsContract
 import android.provider.ContactsContract.CommonDataKinds.Phone
-import android.provider.ContactsContract.Contacts.CONTENT_LOOKUP_URI
-import android.util.Log
-import mozilla.voice.assistant.intents.communication.ui.contact.ContactEntity
-import java.net.URI
+import mozilla.voice.assistant.intents.communication.ui.contact.ContactActivity
 
 internal data class ContactNumber(
     val number: String,
@@ -33,33 +30,76 @@ internal data class ContactNumber(
         private const val PRIMARY_BONUS = 1
         private const val SUPER_PRIMARY_BONUS = 2
         private const val TAG = "NoContactFragment"
+        private val columns = arrayOf(
+            Phone.DISPLAY_NAME,
+            ContactsContract.Data.LOOKUP_KEY,
+            Phone.NORMALIZED_NUMBER,
+            ContactsContract.Data.DATA2,
+            Phone.IS_PRIMARY,
+            Phone.IS_SUPER_PRIMARY
+        )
 
-        internal fun getBestNumber(contactActivity: ContactActivity, lookupKey: String, contactId: Long): String? =
+        internal fun contactUriToContactEntity(
+            contactActivity: ContactActivity,
+            contactUri: Uri
+        ): ContactEntity =
+            contactActivity.contentResolver?.let { resolver ->
+                cursorToContentEntity(
+                    resolver.query(
+                        contactUri,
+                        columns,
+                        null,
+                        null,
+                        null
+                    ),
+                    contactActivity.viewModel.nickname
+                )
+            } ?: throw AssertionError("Unable to access contentResolver")
+
+        internal fun contactIdToContactEntity(
+            contactActivity: ContactActivity,
+            contactId: Long
+        ): ContactEntity =
             // https://learning.oreilly.com/library/view/android-cookbook-2nd/9781449374471/ch10.html
             contactActivity.contentResolver?.let { resolver ->
-                val mode = contactActivity.viewModel.mode
-                //val uri = CONTENT_LOOKUP_URI.buildUpon().appendPath(lookupKey).build()
-                // val uri = Phone.CONTENT_URI.buildUpon().appendQueryParameter(Phone.CONTACT_ID, contactId.toString()).build()
-                val bestNumber = resolver.query(
-                    Phone.CONTENT_URI,
-                    null,
-                    "${Phone.CONTACT_ID}=?",
-                    arrayOf(contactId.toString()),
-                    null
-                )?.use { numbers ->
-                    // https://stackoverflow.com/a/39067259/631051
-                    (1..numbers.count).map {
-                        numbers.moveToNext()
-                        ContactNumber(
-                            numbers.getString(numbers.getColumnIndex(Phone.NORMALIZED_NUMBER)),
-                            numbers.getInt(numbers.getColumnIndex(ContactsContract.Data.DATA2)),
-                            numbers.getInt(numbers.getColumnIndex(Phone.IS_PRIMARY)) > 0,
-                            numbers.getInt(numbers.getColumnIndex(Phone.IS_SUPER_PRIMARY)) > 0
-                        )
-                    }
-                }?.maxBy { it.getScore(mode) }?.number
-                return bestNumber
-            }
+                cursorToContentEntity(
+                    resolver.query(
+                        Phone.CONTENT_URI,
+                        columns,
+                        "${Phone.CONTACT_ID}=?",
+                        arrayOf(contactId.toString()),
+                        null
+                    ),
+                    contactActivity.viewModel.nickname
+                )
+            } ?: throw AssertionError("Unable to access contentResolver")
 
+        private fun cursorToContentEntity(
+            cursor: Cursor,
+            nickname: String
+        ): ContactEntity {
+            cursor.moveToFirst()
+            val name = cursor.getString(cursor.getColumnIndex(Phone.DISPLAY_NAME))
+            val lookupKey = cursor.getString(cursor.getColumnIndex(ContactsContract.Data.LOOKUP_KEY))
+            return (1..cursor.count).map {
+                ContactNumber(
+                    cursor.getString(cursor.getColumnIndex(Phone.NORMALIZED_NUMBER)),
+                    cursor.getInt(cursor.getColumnIndex(ContactsContract.Data.DATA2)),
+                    cursor.getInt(cursor.getColumnIndex(Phone.IS_PRIMARY)) > 0,
+                    cursor.getInt(cursor.getColumnIndex(Phone.IS_SUPER_PRIMARY)) > 0
+                ).also {
+
+                    cursor.moveToNext()
+                }
+            }.let { contactNumbers ->
+                ContactEntity(
+                    nickname,
+                    name,
+                    lookupKey,
+                    contactNumbers.maxBy { it.getScore(ContactActivity.SMS_MODE) }?.number,
+                    contactNumbers.maxBy { it.getScore(ContactActivity.VOICE_MODE) }?.number
+                )
+            }
+        }
     }
 }

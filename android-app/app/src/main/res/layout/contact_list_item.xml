@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     xmlns:tools="http://schemas.android.com/tools"
     android:orientation="horizontal"
-    tools:context=".intents.communication.ContactActivity">
+    tools:context=".intents.communication.ui.contact.ContactActivity">
     <ImageView android:id="@+id/ivContactPhoto"
         android:contentDescription="thumbnail image"
         android:layout_width="@android:dimen/app_icon_size"

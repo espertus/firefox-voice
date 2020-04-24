@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".intents.communication.ui.contact.ContactFragment">
+    tools:context=".intents.communication.ui.contact.MultipleContactsFragment">
     <TextView
         android:id="@+id/contactStatusView"
         style="@style/StatusText"

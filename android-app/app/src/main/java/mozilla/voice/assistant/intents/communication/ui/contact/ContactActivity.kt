@@ -1,7 +1,6 @@
-package mozilla.voice.assistant.intents.communication
+package mozilla.voice.assistant.intents.communication.ui.contact
 
 import android.Manifest
-import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,11 +8,10 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.BaseColumns
 import android.provider.ContactsContract
 import android.util.Log
-import android.widget.CursorAdapter
 import android.widget.Toast
+import androidx.cursoradapter.widget.CursorAdapter
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
@@ -27,13 +25,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mozilla.voice.assistant.R
-import mozilla.voice.assistant.intents.communication.ui.contact.ContactDatabase
-import mozilla.voice.assistant.intents.communication.ui.contact.ContactEntity
-import mozilla.voice.assistant.intents.communication.ui.contact.ContactFragment
-import mozilla.voice.assistant.intents.communication.ui.contact.ContactRepository
+import mozilla.voice.assistant.intents.communication.ContactDatabase
+import mozilla.voice.assistant.intents.communication.ContactEntity
+import mozilla.voice.assistant.intents.communication.ContactNumber
+import mozilla.voice.assistant.intents.communication.ContactRepository
 
 class ContactActivity : FragmentActivity() {
     internal lateinit var viewModel: ContactViewModel
+    internal var contactLoader: ContactLoader? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.e(TAG, "Entering onCreate()")
@@ -66,7 +65,9 @@ class ContactActivity : FragmentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
             checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
         ) {
-            requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), PERMISSIONS_REQUEST)
+            requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS),
+                PERMISSIONS_REQUEST
+            )
         } else {
             seekContactsWithNickname()
         }
@@ -89,20 +90,10 @@ class ContactActivity : FragmentActivity() {
     }
 
     private fun seekContactsWithNickname() {
-        val contactLoader: LoaderManager.LoaderCallbacks<Cursor> = ContactLoader()
-        LoaderManager.getInstance(this).initLoader(0, null, contactLoader)
-        /*
-        val contactFragment = ContactFragment.newInstance()
-        supportFragmentManager.beginTransaction()
-            .add(R.id.fragment_container, contactFragment)
-            .commit()
-
-        // 3. Start contact picker.
-        withContext(Dispatchers.Main) {
-            startContactPicker()
+        ContactLoader().let {
+            contactLoader = it
+            LoaderManager.getInstance(this).initLoader(0, null, it)
         }
-
-         */
     }
 
     private fun buildModel() =
@@ -110,8 +101,8 @@ class ContactActivity : FragmentActivity() {
             this,
             ContactViewModelFactory(
                 application,
-                intent.getStringExtra(ContactActivity.MODE_KEY),
-                intent.getStringExtra(ContactActivity.NICKNAME_KEY)
+                intent.getStringExtra(MODE_KEY),
+                intent.getStringExtra(NICKNAME_KEY)
                     .toLowerCase(Locale.getDefault())
             )
         ).get(ContactViewModel::class.java)
@@ -131,70 +122,22 @@ class ContactActivity : FragmentActivity() {
         finish()
     }
 
-    // Called by fragment when it has resolved the contact.
-    internal fun resolveContact() {}
-
-    /*
-    private fun getContact(contactUri: Uri): ContactEntity {
-        val projection = arrayOf(
-            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY,
-            BaseColumns._ID,
-            ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
-        )
-        val cursor = contentResolver.query(
-            contactUri, projection, null, null, null
-        )
-        if (cursor != null && cursor.moveToFirst()) {
-            val newContact = ContactEntity(
-                viewModel.nickname,
-                cursor.getString(0),
-                cursor.getLong(1),
-                // For now, use same number for both.
-                cursor.getString(2),
-                cursor.getString(2)
-            )
-            cursor.close()
-            return newContact
-        } else {
-            throw java.lang.AssertionError("Unhandled case")
-        }
-    }
-
-     */
-
     internal fun addContact(contactEntity: ContactEntity) {
         viewModel.insert(contactEntity)
     }
 
-    private fun addContactFragment(cursor: Cursor) {
-        val ft = supportFragmentManager.beginTransaction()
-        ft.replace(R.id.fragment_container, ContactFragment(cursor))
-        ft.commit()
+    private fun addMultipleContactsFragment(cursor: Cursor) {
+        supportFragmentManager.beginTransaction().apply {
+            replace(R.id.fragment_container, MultipleContactsFragment(cursor))
+            commit()
+        }
     }
 
     private fun addNoContactFragment() {
-        // TODO: Ask user to pick a contact.
-    }
-
-    internal fun cursorToContactEntity(
-        contactActivity: ContactActivity,
-        cursor: Cursor,
-        position: Int
-    ): ContactEntity {
-        val nickname = contactActivity.viewModel.nickname
-        val mode = contactActivity.viewModel.mode
-        cursor.moveToPosition(position)
-        val id = cursor.getLong(ContactActivity.CONTACT_ID_INDEX)
-        val key = cursor.getString(CONTACT_LOOKUP_KEY_INDEX)
-        val bestNumber = ContactNumber.getBestNumber(contactActivity, key, id)
-        // TODO: Currently, bestNumber could be null. Handle this case.
-        return ContactEntity(
-            nickname,
-            cursor.getString(ContactActivity.CONTACT_DISPLAY_NAME_INDEX),
-            id,
-            if (mode == ContactActivity.SMS_MODE) bestNumber else null,
-            if (mode == ContactActivity.VOICE_MODE) bestNumber else null
-        )
+        supportFragmentManager.beginTransaction().apply {
+            replace(R.id.fragment_container, NoContactFragment())
+            commit()
+        }
     }
 
     inner class ContactLoader : LoaderManager.LoaderCallbacks<Cursor> {
@@ -227,17 +170,19 @@ class ContactActivity : FragmentActivity() {
                     cursor.close()
                     addNoContactFragment()
                 }
-                1 -> cursor.use { cursor ->
-                    (cursorToContactEntity(this@ContactActivity, cursor, 0)).let {
-                        addContact(it)
-                        initiateRequestedActivity(it)
+                1 -> cursor.use {
+                    it.moveToNext()
+                    ContactNumber.contactIdToContactEntity(
+                        this@ContactActivity,
+                        it.getLong(CONTACT_ID_INDEX)
+                    ).let { contactEntity ->
+                        addContact(contactEntity)
+                        initiateRequestedActivity(contactEntity)
                     }
                 }
-                else -> addContactFragment(cursor) // TODO: close cursor
+                else -> addMultipleContactsFragment(cursor) // cursor closed by MultipleContactsFragment
             }
         }
-
-
 
         override fun onLoaderReset(loader: Loader<Cursor>) {
             cursorAdapter?.swapCursor(null)
@@ -296,8 +241,14 @@ class ContactViewModel(
     val repository: ContactRepository
 
     init {
-        val contactsDao = ContactDatabase.getDatabase(application, viewModelScope).contactDao()
-        repository = ContactRepository(contactsDao)
+        val contactsDao = ContactDatabase.getDatabase(
+            application,
+            viewModelScope
+        ).contactDao()
+        repository =
+            ContactRepository(
+                contactsDao
+            )
     }
 
     suspend fun getContact(contactNickname: String = nickname): ContactEntity? {

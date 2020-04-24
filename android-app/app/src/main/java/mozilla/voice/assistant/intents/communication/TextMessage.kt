@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.annotation.VisibleForTesting
 import mozilla.voice.assistant.intents.Metadata
 import mozilla.voice.assistant.intents.ParseResult
+import mozilla.voice.assistant.intents.communication.ui.contact.ContactActivity
 
 class TextMessage {
     companion object {

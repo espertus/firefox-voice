@@ -12,11 +12,11 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.cursoradapter.widget.CursorAdapter
 import androidx.fragment.app.Fragment
-import kotlinx.android.synthetic.main.contacts_fragment.*
+import kotlinx.android.synthetic.main.multiple_contacts_fragment.*
 import mozilla.voice.assistant.R
-import mozilla.voice.assistant.intents.communication.ContactActivity
+import mozilla.voice.assistant.intents.communication.ContactNumber
 
-class ContactFragment(
+class MultipleContactsFragment(
     private val cursor: Cursor
 ) : Fragment(), AdapterView.OnItemClickListener {
     companion object {
@@ -31,7 +31,7 @@ class ContactFragment(
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        return inflater.inflate(R.layout.contacts_fragment, container, false)
+        return inflater.inflate(R.layout.multiple_contacts_fragment, container, false)
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
@@ -40,19 +40,28 @@ class ContactFragment(
             val nickname = it.viewModel.nickname.capitalize()
             contactStatusView.text =
                 "Found ${cursor.count} matches.\nSay or tap the $nickname you want."
-            cursorAdapter = ContactCursorAdapter(it, cursor)
-            contactsList.adapter = cursorAdapter
-            contactsList.onItemClickListener = this
+            ContactCursorAdapter(it, cursor).let { adapter ->
+                cursorAdapter = adapter
+                it.contactLoader?.registerAdapter(adapter)
+                contactsList.adapter = adapter
+                contactsList.onItemClickListener = this
+            }
         }
     }
 
     override fun onItemClick(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
         (activity as? ContactActivity)?.let { contactActivity ->
-            contactActivity.cursorToContactEntity(contactActivity, cursor, position).let {
-                if (contactsCheckBox.isChecked) {
-                    contactActivity.addContact(it)
+            cursor.use {
+                it.moveToPosition(position)
+                ContactNumber.contactIdToContactEntity(
+                    contactActivity,
+                    it.getLong(ContactActivity.CONTACT_ID_INDEX)
+                ).let { contactEntity ->
+                    if (contactsCheckBox.isChecked) {
+                        contactActivity.addContact(contactEntity)
+                    }
+                    contactActivity.initiateRequestedActivity(contactEntity)
                 }
-                contactActivity.initiateRequestedActivity(it)
             }
         }
     }
