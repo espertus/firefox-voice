@@ -132,7 +132,7 @@ class ContactActivity : FragmentActivity() {
 
     private fun addNoContactFragment() {
         supportFragmentManager.beginTransaction().apply {
-            replace(R.id.fragment_container, NoContactsFragment())
+            replace(R.id.fragment_container, NoContactsFragment.newInstance())
             commit()
         }
     }

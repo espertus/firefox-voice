@@ -78,11 +78,11 @@ private fun cursorToContentEntity(
     }
 }
 
-internal data class ContactNumber(
+private data class ContactNumber(
     val number: String,
-    val type: Int,
-    val isPrimary: Boolean,
-    val isSuperPrimary: Boolean
+    private val type: Int,
+    private val isPrimary: Boolean,
+    private val isSuperPrimary: Boolean
 ) {
     internal fun getScore(mode: String) =
         listOf(

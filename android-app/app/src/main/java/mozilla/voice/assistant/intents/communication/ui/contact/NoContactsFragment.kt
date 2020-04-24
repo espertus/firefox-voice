@@ -13,11 +13,10 @@ import mozilla.voice.assistant.R
 import mozilla.voice.assistant.intents.communication.contactUriToContactEntity
 
 /**
- * A simple [Fragment] subclass.
- * Use the [NoContactsFragment.newInstance] factory method to
- * create an instance of this fragment.
+ * A fragment instantiated when no Android contact matches the uttered name.
+ * It informs the user and lets them open the contact picker to select a contact.
  */
-class NoContactsFragment : Fragment() {
+internal class NoContactsFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -63,7 +62,10 @@ class NoContactsFragment : Fragment() {
     }
 
     companion object {
-        private const val TAG = "NoContactFragment"
+        private const val TAG = "NoContactsFragment"
         private const val SELECT_CONTACT_FOR_NICKNAME = 1
+
+        @JvmStatic
+        fun newInstance() = NoContactsFragment()
     }
 }
