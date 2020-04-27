@@ -23,8 +23,11 @@ class ContactCursorAdapter(
             val displayName = it.getString(ContactActivity.CONTACT_DISPLAY_NAME_INDEX)
             val displayNameView = view?.findViewById<TextView>(R.id.tvContactDisplayName)
             displayNameView?.text = displayName
+            val iconView = view?.findViewById<ImageView>(R.id.ivContactPhoto)
+            // Before adding the below statement, the wrong image was sometimes displayed.
+            // https://stackoverflow.com/a/50640970/631051
+            iconView?.setImageURI(null)
             it.getString(ContactActivity.CONTACT_PHOTO_URI_INDEX)?.let { photoString ->
-                val iconView = view?.findViewById<ImageView>(R.id.ivContactPhoto)
                 iconView?.setImageURI(Uri.parse(photoString))
             }
         }
