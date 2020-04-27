@@ -23,7 +23,7 @@ data class ContactEntity(
 
 @Dao
 interface ContactDao {
-    @Query("SELECT * FROM contact_table WHERE nickname = :nickname")
+    @Query("SELECT * FROM contact_table WHERE nickname COLLATE NOCASE = :nickname")
     fun findByNickname(nickname: String): ContactEntity?
 
     @Query("SELECT * FROM contact_table ORDER BY nickname")

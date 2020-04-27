@@ -20,7 +20,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.loader.app.LoaderManager
 import androidx.loader.content.CursorLoader
 import androidx.loader.content.Loader
-import java.util.Locale
 import kotlinx.android.synthetic.main.contact_activity.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -107,7 +106,6 @@ class ContactActivity : FragmentActivity() {
                 application,
                 intent.getStringExtra(MODE_KEY),
                 intent.getStringExtra(NICKNAME_KEY)
-                    .toLowerCase(Locale.getDefault())
             )
         ).get(ContactViewModel::class.java)
 
