@@ -87,9 +87,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun closeRecognizer() {
-        recognizer?.stopListening()
-        recognizer?.destroy()
-        recognizer = null
+        Log.e(TAG, "At start of closeRecognizer()")
+       // Log.e(TAG, Thread.currentThread().stackTrace.joinToString(separator = "\n"))
+        recognizer?.run {
+            Log.e(TAG, "Stopping recognizer: $this")
+            stopListening()
+            cancel()
+            destroy()
+            recognizer = null
+        } ?: Log.e(TAG, "Recognizer already null")
     }
 
     private var shownBurst = false
@@ -115,8 +121,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startSpeechRecognition() {
+        Log.e(TAG, "At start of startSpeechRecognition()")
         if (recognizer == null) {
             recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            Log.e(TAG, "Creating new recognizer: $recognizer")
             recognizer?.setRecognitionListener(Listener())
         }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
@@ -124,6 +132,7 @@ class MainActivity : AppCompatActivity() {
             RecognizerIntent.EXTRA_LANGUAGE_MODEL,
             RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
         )
+        Log.e(TAG, "Starting listening")
         recognizer?.startListening(intent)
     }
 
